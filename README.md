@@ -17,12 +17,14 @@ vercel
 ```
 lineup-project/
 ├── api/
-│   └── prices.js       ← 네이버 증권 주가 프록시
+│   └── prices.js       ← 네이버 증권 주가 프록시 (Vercel이 /api/prices로 자동 인식)
 ├── public/
-│   └── index.html      ← 게임 본체
-├── vercel.json         ← 라우팅 설정
+│   └── index.html      ← 게임 본체 (Vercel이 정적 루트로 자동 인식)
+├── package.json
 └── README.md
 ```
+
+별도 `vercel.json` 없이 Vercel의 zero-config 규칙(루트 `api/`는 서버리스 함수로, `public/`은 정적 루트로)을 사용합니다.
 
 ## 실시간 주가 연동 방식
 
