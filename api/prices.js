@@ -22,15 +22,16 @@ export default async function handler(req, res) {
     if (!response.ok) throw new Error(`Naver API error: ${response.status}`);
 
     const raw = await response.json();
+    console.log('Naver raw response:', JSON.stringify(raw));
 
     // 응답 파싱: datas 배열에서 종목코드 → 현재가 매핑
     const result = {};
     const items = raw.datas || [];
     items.forEach(item => {
-      const code = item.code || item.srtnCd;
-      const price = item.closePrice || item.stck_prpr;
+      const code = item.itemCode;
+      const price = item.closePriceRaw;
       if (code && price) {
-        result[code] = parseInt(String(price).replace(/,/g, ''), 10);
+        result[code] = parseInt(price, 10);
       }
     });
 
