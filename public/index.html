@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LINE UP ↑↓ — 주가 예측 게임</title>
+<style>
+@font-face {
+  font-family: 'Paperlogy';
+  src: url('https://cdn.jsdelivr.net/gh/fonts-archive/Paperlogy/Paperlogy-1Thin.woff2') format('woff2');
+  font-weight: 100; font-style: normal;
+}
+@font-face {
+  font-family: 'Paperlogy';
+  src: url('https://cdn.jsdelivr.net/gh/fonts-archive/Paperlogy/Paperlogy-4Regular.woff2') format('woff2');
+  font-weight: 400; font-style: normal;
+}
+@font-face {
+  font-family: 'Paperlogy';
+  src: url('https://cdn.jsdelivr.net/gh/fonts-archive/Paperlogy/Paperlogy-6SemiBold.woff2') format('woff2');
+  font-weight: 600; font-style: normal;
+}
+@font-face {
+  font-family: 'Paperlogy';
+  src: url('https://cdn.jsdelivr.net/gh/fonts-archive/Paperlogy/Paperlogy-7Bold.woff2') format('woff2');
+  font-weight: 700; font-style: normal;
+}
+@font-face {
+  font-family: 'Paperlogy';
+  src: url('https://cdn.jsdelivr.net/gh/fonts-archive/Paperlogy/Paperlogy-8ExtraBold.woff2') format('woff2');
+  font-weight: 800; font-style: normal;
+}
+</style>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#070B16;color:#E8ECF8;font-family:'Paperlogy',-apple-system,sans-serif;min-height:100vh}
+.app{max-width:520px;margin:0 auto;padding-bottom:90px}
+
+.hdr{background:#0A0E1C;border-bottom:1px solid #18203A;padding:14px 16px 0;position:sticky;top:0;z-index:10}
+.hdr-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+.logo{font-size:22px;font-weight:700;letter-spacing:-0.03em;line-height:1}
+.logo-sub{font-size:10px;color:#7A90B0;margin-top:3px;letter-spacing:.06em}
+.hdr-score-lbl{font-size:10px;color:#7A90B0;margin-bottom:2px;text-align:right}
+.hdr-score-val{font-size:13px;font-weight:700;color:#E8ECF8;text-align:right}
+
+.tabs{display:flex;border-top:1px solid #18203A}
+.tab{flex:1;padding:9px 0;background:transparent;border:none;cursor:pointer;font-size:12px;color:#7A90B0;border-bottom:2px solid transparent;transition:all .15s}
+.tab.on{color:#E8ECF8;font-weight:700;border-bottom-color:#E83030}
+
+.content{padding:14px 16px 0;display:none}
+.content.show{display:block}
+.phase-row{display:flex;justify-content:space-between;margin-bottom:12px;font-size:12px;color:#7A90B0}
+.phase-active{color:#FFD030;font-weight:700}
+.phase-done{color:#40C880;font-weight:700}
+
+/* 종목 카드 */
+.scard{background:#0C1120;border:1px solid #18203A;border-radius:11px;padding:12px 13px;margin-bottom:8px;transition:border-color .25s}
+.scard.correct{border-color:#40C880}
+.scard.wrong{border-color:#E83030}
+.scard-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sname-wrap{display:flex;align-items:baseline;gap:5px;flex-wrap:wrap}
+.sname{font-size:14px;font-weight:700}
+.ssec{font-size:11px;color:#7A90B0}
+.cur-p{font-size:11px;color:#7A90B0;background:#131828;border-radius:5px;padding:2px 7px}
+.res-tag{font-size:12px;font-weight:700;padding:2px 8px;border-radius:5px;background:#131828;white-space:nowrap}
+
+.choices{display:flex;gap:5px;margin-bottom:9px}
+.cbtn{flex:1;padding:8px 3px;border:1px solid;border-radius:7px;cursor:pointer;font-size:11px;background:#06090F;transition:all .15s;text-align:center}
+.cbtn:disabled{cursor:default}
+.cbtn.up{border-color:#281010;color:#7A90B0}
+.cbtn.flat{border-color:#18203A;color:#7A90B0}
+.cbtn.dn{border-color:#101828;color:#7A90B0}
+.cbtn.up.sel,.cbtn.up.act{border-color:#E83030;background:#E8303018;color:#E83030;font-weight:700}
+.cbtn.flat.sel,.cbtn.flat.act{border-color:#666;background:#66666618;color:#C8D0DC;font-weight:700}
+.cbtn.dn.sel,.cbtn.dn.act{border-color:#3070E8;background:#3070E818;color:#5090F8;font-weight:700}
+.cl{display:block;font-size:11px}
+.cs{display:block;font-size:9px;margin-top:1px;opacity:.85}
+
+.divider-label{font-size:9px;color:#7A90B0;letter-spacing:.1em;text-transform:uppercase;margin:0 0 7px;display:flex;align-items:center;gap:6px}
+.divider-label::before{content:'';flex:none;width:1px;height:10px;background:#18203A}
+.divider-label::after{content:'';flex:1;height:1px;background:#18203A}
+
+.price-row{display:flex;gap:8px;align-items:center}
+.price-input{flex:1;background:#06090F;border:1px solid #18203A;border-radius:7px;padding:8px 10px;color:#E8ECF8;font-size:13px;font-weight:700;outline:none;transition:border-color .2s}
+.price-input:focus{border-color:#3070E8}
+.price-input:disabled{color:#7A90B0;cursor:default}
+.price-input::placeholder{font-size:11px;font-weight:400;color:#4A6080}
+.won{font-size:12px;color:#7A90B0;flex-shrink:0}
+.pit-result{margin-top:7px;background:#131828;border-radius:7px;padding:7px 10px;font-size:11px;line-height:1.7}
+
+.sub-btn{width:100%;padding:13px;margin-top:7px;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s}
+.sub-btn.ready{background:#E83030;color:#fff}
+.sub-btn.off{background:#131828;color:#7A90B0;cursor:not-allowed;font-size:13px}
+
+.res-box{background:#0C1120;border:1px solid #18203A;border-radius:12px;padding:16px 14px;margin-top:7px}
+.res-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.res-half{background:#131828;border-radius:9px;padding:12px;text-align:center}
+.res-label{font-size:9px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px}
+.res-label.bat{color:#E83030}
+.res-label.pit{color:#5090F8}
+.res-big-num{font-size:30px;font-weight:700;letter-spacing:-0.03em}
+.res-of{font-size:13px;color:#7A90B0}
+.res-sub{font-size:10px;color:#7A90B0;margin-top:2px}
+.res-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:9px}
+.mini-s{background:#131828;border-radius:7px;padding:9px;text-align:center}
+.mini-v{font-size:14px;font-weight:700}
+.mini-l{font-size:9px;color:#7A90B0;margin-top:2px}
+.goto-btn{width:100%;padding:10px;background:#131828;color:#7080A0;border:1px solid #1E2840;border-radius:8px;font-size:12px;cursor:pointer}
+
+/* 종목 스크롤 */
+.stock-scroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:12px;scrollbar-width:none}
+.stock-scroll::-webkit-scrollbar{display:none}
+.sp{flex-shrink:0;padding:5px 11px;border-radius:99px;font-size:11px;cursor:pointer;border:1px solid;transition:all .15s}
+.sp.on{background:#E83030;border-color:#E83030;color:#fff;font-weight:700}
+.sp.off{background:#0C1120;border-color:#18203A;color:#6070A0}
+
+/* 라인업 섹션 */
+.lu-section{margin-bottom:14px}
+.lu-section-hdr{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.lu-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:99px;letter-spacing:.04em;flex-shrink:0}
+.badge-bat{background:#E8303020;color:#E83030;border:1px solid #E8303040}
+.badge-pit{background:#3070E820;color:#5090F8;border:1px solid #3070E840}
+.lu-title{font-size:13px;font-weight:700}
+.lu-sub{font-size:11px;color:#7A90B0;margin-left:auto;white-space:nowrap}
+
+.lcard{background:#0C1120;border:1px solid #18203A;border-radius:9px;padding:11px 13px;margin-bottom:5px;display:flex;align-items:center;gap:10px}
+.lcard.mine-bat{border-color:#E83030;background:#140809}
+.lcard.mine-pit{border-color:#3070E8;background:#08101A}
+.rank-c{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.r-bat-1{background:#E83030;color:#fff}
+.r-pit-1{background:#3070E8;color:#fff}
+.r-gold{background:#FFD030;color:#08080C}
+.r-silver{background:#C0C8D0;color:#08080C}
+.r-bronze{background:#C87840;color:#fff}
+.r-n{background:#131828;color:#7A90B0}
+.pinfo{flex:1;min-width:0}
+.pname{font-size:13px;font-weight:700;display:flex;align-items:center;gap:5px}
+.me-tag{font-size:9px;border-radius:3px;padding:1px 4px;font-weight:700;flex-shrink:0}
+.me-bat{background:#E83030;color:#fff}
+.me-pit{background:#3070E8;color:#fff}
+.pstat{font-size:10px;color:#7A90B0;margin-top:1px}
+.mbar{height:2px;background:#131828;border-radius:99px;margin-top:5px;overflow:hidden}
+.mfill{height:100%;border-radius:99px}
+.abox{text-align:right;min-width:58px;flex-shrink:0}
+.anum{font-size:19px;font-weight:700;letter-spacing:-0.02em}
+.asub{font-size:10px;color:#7A90B0}
+
+.sec-divider{height:1px;background:#18203A;margin:12px 0}
+.empty{color:#7A90B0;font-size:12px;text-align:center;padding:20px}
+
+/* 올스타 */
+.as-banner{background:#0C1120;border:1px solid #18203A;border-radius:11px;padding:13px 14px;margin-bottom:14px}
+.as-eye{font-size:10px;font-weight:700;letter-spacing:.12em;color:#FFD030;text-transform:uppercase;margin-bottom:4px}
+.as-title{font-size:17px;font-weight:700;margin-bottom:2px}
+.as-sub{font-size:11px;color:#7A90B0}
+
+.leg{background:#0C1120;border:1px solid #18203A;border-radius:9px;padding:11px 13px;margin-top:7px;font-size:11px;color:#7A90B0;line-height:1.85}
+</style>
+</head>
+<body>
+<div class="app">
+
+<div class="hdr">
+  <div class="hdr-top">
+    <div>
+      <div class="logo">LINE <span style="color:#E83030">↑↓</span> UP</div>
+      <div class="logo-sub">KOSPI TOP 10 · 주가 예측 게임</div>
+    </div>
+    <div>
+      <div class="hdr-score-lbl">오늘 예측</div>
+      <div class="hdr-score-val" id="hdr-score">0/10 입력</div>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab on" id="t0" onclick="showTab(0)">오늘 예측</button>
+    <button class="tab" id="t1" onclick="showTab(1)">종목 라인업</button>
+    <button class="tab" id="t2" onclick="showTab(2)">올스타</button>
+  </div>
+</div>
+
+<div class="content show" id="tab0">
+  <div class="phase-row">
+    <span id="phase-time">오늘 종가 기준 · 내일 주가 예측</span>
+    <span id="phase-lbl" class="phase-active">예측 중</span>
+  </div>
+  <div id="predict-list"></div>
+  <button class="sub-btn off" id="sub-btn" onclick="doSubmit()">모든 종목을 입력해 주세요</button>
+  <div id="res-area" style="display:none"></div>
+</div>
+
+<div class="content" id="tab1">
+  <div class="stock-scroll" id="stk-scroll"></div>
+  <div id="lu-list"></div>
+</div>
+
+<div class="content" id="tab2">
+  <div class="as-banner">
+    <div class="as-eye">ALL-STAR LINEUP</div>
+    <div class="as-title">전체 종목 통합 최상위 플레이어</div>
+    <div class="as-sub">10회 이상 참여 · 타자(타율) + 투수(ERA) 통합</div>
+  </div>
+  <div id="as-list"></div>
+  <div class="leg" id="leg-box"></div>
+</div>
+
+</div>
+
+<script>
+const STOCKS=[
+  {id:"005930",name:"삼성전자",  sector:"반도체", price:null},
+  {id:"000660",name:"SK하이닉스",sector:"반도체", price:null},
+  {id:"005380",name:"현대차",    sector:"자동차", price:null},
+  {id:"035420",name:"NAVER",    sector:"IT",    price:null},
+  {id:"051910",name:"LG화학",   sector:"화학",  price:null},
+  {id:"006400",name:"삼성SDI",  sector:"배터리",price:null},
+  {id:"035720",name:"카카오",   sector:"IT",    price:null},
+  {id:"028260",name:"삼성물산", sector:"건설",  price:null},
+  {id:"207940",name:"삼성바이오",sector:"바이오",price:null},
+  {id:"005490",name:"POSCO홀딩스",sector:"철강",price:null},
+];
+
+/* ── 장 시간 판별 ──
+   한국 주식 시장: 평일 09:00 ~ 15:30 (KST = UTC+9)
+   - 장 중(09:00~15:30): 예측 비활성
+   - 장 마감 후(15:30~익일 09:00): 예측 활성, 당일 종가 표시
+   - 주말/공휴일: 예측 비활성 (다음 거래일 종가 기준으로 변경 필요)
+*/
+function getMarketPhase() {
+  const now = new Date();
+  const kst = new Date(now.toLocaleString("en-US", {timeZone:"Asia/Seoul"}));
+  const day = kst.getDay(); // 0=일, 6=토
+  const h = kst.getHours();
+  const m = kst.getMinutes();
+  const minNow = h * 60 + m;
+  const open  = 9 * 60;       // 09:00
+  const close = 15 * 60 + 30; // 15:30
+  if (day === 0 || day === 6) return "weekend";   // 주말
+  if (minNow >= open && minNow < close) return "open";    // 장 중
+  if (minNow >= close) return "after";  // 장 마감 후 (당일)
+  return "before"; // 익일 장 전 (전날 종가 기준)
+}
+
+/* ── 종가 데이터 로드 ──
+   실제 서비스: 한국투자증권 오픈API 또는 KRX 연동 필요
+   현재: 데모용 가상 종가 (실제 배포 시 API 교체)
+*/
+const DEMO_PRICES = {
+  "005930": 71800,  "000660": 196500, "005380": 238000,
+  "035420": 181000, "051910": 187500, "006400": 140500,
+  "035720": 37800,  "028260": 104200, "207940": 782000,
+  "005490": 309500,
+};
+
+async function loadClosePrices() {
+  try {
+    // Vercel 프록시를 통해 네이버 증권 실시간 시세 호출
+    const res = await fetch('/api/prices');
+    if (!res.ok) throw new Error('API 응답 오류');
+    const data = await res.json();
+    if (data.ok && data.prices) {
+      STOCKS.forEach(s => {
+        s.price = data.prices[s.id] ?? DEMO_PRICES[s.id] ?? null;
+      });
+      console.log('실시간 주가 로드 완료', data.updatedAt);
+    } else {
+      throw new Error('prices 데이터 없음');
+    }
+  } catch(e) {
+    console.warn('실시간 주가 로드 실패, 데모 데이터 사용:', e.message);
+    STOCKS.forEach(s => { s.price = DEMO_PRICES[s.id] ?? null; });
+  }
+}
+
+function sRnd(seed){let s=seed;return()=>{s=(s*9301+49297)%233280;return s/233280}}
+
+function genResults(){
+  // 익일 결과는 실제 서비스에서 다음날 장 마감 후 API로 수신
+  // 데모: 날짜 기반 시드로 가상 결과 생성
+  const r=sRnd(new Date().getDate()*137+new Date().getMonth()*31+5);
+  return STOCKS.map(s=>{
+    const v=r();const res=v<0.38?"up":v<0.62?"flat":"down";
+    const pct=res==="up"?(1+r()*4):res==="down"?-(1+r()*3):(r()*1.8-0.9);
+    const p=parseFloat(pct.toFixed(2));
+    const base = s.price || 100000;
+    return{id:s.id,result:res,pct:p,close:Math.round(base*(1+p/100))};
+  });
+}
+
+function genDummy(){
+  const names=["김민준","이서연","박지호","최유나","정승현","한아름","오동현","신지민","강민서","윤서준","임채원","송예진","황준혁","조다은","류성민","백지수","홍태양","문수아"];
+  const r=sRnd(42);
+  return names.map((name,i)=>{
+    const plays=Math.floor(18+r()*70);
+    const batSt={},pitSt={};
+    STOCKS.forEach(s=>{
+      const sp=Math.floor(plays*(0.35+r()*0.65));
+      batSt[s.id]={plays:sp,hits:Math.floor(sp*(0.2+r()*0.5))};
+      const pp=Math.floor(plays*(0.35+r()*0.65));
+      pitSt[s.id]={plays:pp,totalEra:parseFloat((pp*(0.5+r()*4)).toFixed(3))};
+    });
+    const tp=Object.values(batSt).reduce((a,b)=>a+b.plays,0);
+    const th=Object.values(batSt).reduce((a,b)=>a+b.hits,0);
+    const pv=Object.values(pitSt);
+    const totalPP=pv.reduce((a,b)=>a+b.plays,0);
+    const totalPE=pv.reduce((a,b)=>a+b.totalEra,0);
+    const avgEra=totalPP?parseFloat((totalPE/totalPP).toFixed(3)):9.99;
+    return{id:i,name,plays,tp,th,batSt,pitSt,avgEra};
+  });
+}
+
+const TODAY=genResults();
+const DUMMY=genDummy();
+const ST={tab:0,batPred:{},pitPred:{},submitted:false,myPlays:10,
+  myBat:{total:0,bySt:{}},myPit:{pitCount:0,totalEra:0,bySt:{}},
+  activeStock:STOCKS[0].id};
+
+function fa(h,p){return p?h/p:0}
+function batAvg(h,p){if(!p)return".000";return"."+Math.floor(fa(h,p)*1000).toString().padStart(3,"0")}
+function pctStr(h,p){return p?Math.round(fa(h,p)*100)+"%":"0%"}
+function avgColor(a){return a>=0.4?"#FFD030":a>=0.33?"#90C8FF":"#E8ECF8"}
+function eraColor(e){return e<=1.5?"#40C880":e<=3?"#FFD030":"#E83030"}
+function rpc(p){return p>=1?"#E83030":p<=-1?"#5090F8":"#888"}
+function fmt(n){return Number(n).toLocaleString("ko-KR")}
+
+function showTab(n){
+  ST.tab=n;
+  for(let i=0;i<3;i++){
+    document.getElementById("tab"+i).className="content"+(i===n?" show":"");
+    document.getElementById("t"+i).className="tab"+(i===n?" on":"");
+  }
+  if(n===1){renderScroll();renderLineup(ST.activeStock);}
+  if(n===2) renderAllstar();
+}
+
+function renderPredict(){
+  document.getElementById("predict-list").innerHTML=STOCKS.map(card).join("");
+  updateSubBtn();updateHdr();
+}
+
+function card(s){
+  const act=TODAY.find(r=>r.id===s.id);
+  const myC=ST.batPred[s.id];
+  const myP=ST.pitPred[s.id];
+  const batOk=ST.submitted&&myC===act.result;
+  const batNg=ST.submitted&&myC&&myC!==act.result;
+  let cls="";
+  if(ST.submitted) cls=batOk&&myP!=null?" correct":" wrong";
+
+  const btns=[
+    {v:"up",c:"up",l:"▲ 상승",s:"+1% 이상"},
+    {v:"flat",c:"flat",l:"━ 보합",s:"-1 ~ +1%"},
+    {v:"down",c:"dn",l:"▼ 하락",s:"-1% 이상"},
+  ].map(b=>{
+    const sel=myC===b.v, ac=ST.submitted&&act.result===b.v;
+    return`<button class="cbtn ${b.c}${sel||ac?" sel":""}" ${ST.submitted?"disabled":""} onclick="pickBat('${s.id}','${b.v}')">
+      <span class="cl">${b.l}</span><span class="cs">${b.s}</span></button>`;
+  }).join("");
+
+  let pitRes="";
+  if(ST.submitted&&myP!=null){
+    const diff=Math.abs(act.close-myP);
+    const dp=parseFloat((diff/act.close*100).toFixed(2));
+    const era=parseFloat((diff/act.close*100).toFixed(3));
+    const g=dp<=0.5?"great":dp<=2?"good":"miss";
+    const gc=g==="great"?"#40C880":g==="good"?"#FFD030":"#E83030";
+    const gl=g==="great"?"◎ 매우 근접":g==="good"?"○ 근접":"△ 빗나감";
+    pitRes=`<div class="pit-result">
+      <span style="color:${gc};font-weight:700">${gl}</span>
+      <span style="color:#7A90B0;margin-left:6px">실제 ${fmt(act.close)}원</span><br>
+      <span style="color:#7A90B0">오차 ${fmt(diff)}원 (${dp}%) · ERA ${era}</span>
+    </div>`;
+  }
+
+  const resTag=ST.submitted?`<span class="res-tag" style="color:${rpc(act.pct)}">${act.pct>=0?"+":""}${act.pct}% ${batOk?"✓":batNg?"✗":""}</span>`:"";
+
+  return`<div class="scard${cls}">
+    <div class="scard-head">
+      <div class="sname-wrap">
+        <span class="sname">${s.name}</span>
+        <span class="ssec">${s.sector}</span>
+        <span class="cur-p">${s.price ? fmt(s.price)+"원 (종가)" : "로딩 중..."}</span>
+      </div>
+      ${resTag}
+    </div>
+    <div class="choices">${btns}</div>
+    <div class="divider-label">투수 · 예상 종가</div>
+    <div class="price-row">
+      <input class="price-input" type="number" placeholder="내일 종가 예측 (오늘 종가 참고)"
+        ${ST.submitted?"disabled":""} value="${myP!=null?myP:""}"
+        oninput="pickPit('${s.id}',this.value)">
+      <span class="won">원</span>
+    </div>
+    ${pitRes}
+  </div>`;
+}
+
+function pickBat(id,val){if(ST.submitted)return;ST.batPred[id]=val;renderPredict();}
+function pickPit(id,val){
+  if(ST.submitted)return;
+  const n=parseInt(val);
+  if(!isNaN(n)&&n>0)ST.pitPred[id]=n;else delete ST.pitPred[id];
+  updateSubBtn();updateHdr();
+}
+function allDone(){return STOCKS.every(s=>ST.batPred[s.id])&&STOCKS.every(s=>ST.pitPred[s.id]!=null);}
+function doneCount(){return{b:STOCKS.filter(s=>ST.batPred[s.id]).length,p:STOCKS.filter(s=>ST.pitPred[s.id]!=null).length};}
+function updateSubBtn(){
+  const btn=document.getElementById("sub-btn");
+  if(ST.submitted){btn.style.display="none";return;}
+  if(allDone()){btn.className="sub-btn ready";btn.textContent="오늘 예측 제출하기";}
+  else{const {b,p}=doneCount();btn.className="sub-btn off";btn.textContent=`상승/하락 ${b}/10 · 예상가 ${p}/10 — 모두 입력해 주세요`;}
+}
+function updateHdr(){
+  if(ST.submitted){
+    const h=STOCKS.filter(s=>ST.batPred[s.id]===TODAY.find(r=>r.id===s.id).result).length;
+    document.getElementById("hdr-score").textContent=`타 ${h}/10 적중`;
+  }else{
+    const {b,p}=doneCount();
+    document.getElementById("hdr-score").textContent=`${Math.min(b,p)}/10 입력`;
+  }
+}
+
+function doSubmit(){
+  if(!allDone())return;
+  ST.submitted=true;
+  ST.myPlays++;
+  document.getElementById("phase-lbl").textContent="결과 확인";
+  document.getElementById("phase-lbl").className="phase-done";
+  let hits=0;const eras=[];
+  STOCKS.forEach(s=>{
+    const act=TODAY.find(r=>r.id===s.id);
+    const hit=ST.batPred[s.id]===act.result;
+    if(hit)hits++;
+    const pb=ST.myBat.bySt[s.id]||{plays:0,hits:0};
+    ST.myBat.bySt[s.id]={plays:pb.plays+1,hits:pb.hits+(hit?1:0)};
+    const diff=Math.abs(act.close-ST.pitPred[s.id]);
+    const era=parseFloat((diff/act.close*100).toFixed(3));
+    eras.push(era);
+    const pp=ST.myPit.bySt[s.id]||{plays:0,totalEra:0};
+    ST.myPit.bySt[s.id]={plays:pp.plays+1,totalEra:parseFloat((pp.totalEra+era).toFixed(3))};
+  });
+  ST.myBat.total+=hits;
+  const avgEra=parseFloat((eras.reduce((a,b)=>a+b,0)/eras.length).toFixed(3));
+  ST.myPit.totalEra=parseFloat((ST.myPit.totalEra+avgEra).toFixed(3));
+  ST.myPit.pitCount++;
+  renderPredict();updateHdr();
+  const tp=Object.values(ST.myBat.bySt).reduce((a,b)=>a+b.plays,0);
+  const th=ST.myBat.total;
+  const oe=ST.myPit.pitCount?parseFloat((ST.myPit.totalEra/ST.myPit.pitCount).toFixed(3)):0;
+  const ar=document.getElementById("res-area");
+  ar.style.display="block";
+  ar.innerHTML=`<div class="res-box">
+    <div class="res-row">
+      <div class="res-half"><div class="res-label bat">⚾ BATTER</div>
+        <div><span class="res-big-num" style="color:#E83030">${hits}</span><span class="res-of">/10</span></div>
+        <div class="res-sub">오늘 적중</div></div>
+      <div class="res-half"><div class="res-label pit">🎯 PITCHER</div>
+        <div><span class="res-big-num" style="color:${eraColor(avgEra)}">${avgEra}</span></div>
+        <div class="res-sub">오늘 ERA</div></div>
+    </div>
+    <div class="res-stats">
+      <div class="mini-s"><div class="mini-v">${ST.myPlays}회</div><div class="mini-l">누적 참여</div></div>
+      <div class="mini-s"><div class="mini-v" style="color:#FFD030">${batAvg(th,tp)}</div><div class="mini-l">통산 타율</div></div>
+      <div class="mini-s"><div class="mini-v" style="color:#90C8FF">${oe}</div><div class="mini-l">통산 ERA</div></div>
+    </div>
+    <button class="goto-btn" onclick="showTab(1)">종목 라인업 보기 →</button>
+  </div>`;
+}
+
+function renderScroll(){
+  document.getElementById("stk-scroll").innerHTML=STOCKS.map(s=>`
+    <button class="sp ${s.id===ST.activeStock?"on":"off"}" onclick="chgStock('${s.id}')">${s.name}</button>`).join("");
+}
+function chgStock(id){ST.activeStock=id;renderScroll();renderLineup(id);}
+
+function renderLineup(sid){
+  ST.activeStock=sid;
+  const stock=STOCKS.find(s=>s.id===sid);
+
+  let bc=DUMMY.map(p=>({...p,sh:p.batSt[sid]||{plays:0,hits:0}})).filter(p=>p.sh.plays>=10);
+  const myBsh=ST.myBat.bySt[sid]||{plays:0,hits:0};
+  if(myBsh.plays>=10)bc.push({id:99,name:"나 (플레이어)",sh:myBsh,isMine:true});
+  bc.sort((a,b)=>fa(b.sh.hits,b.sh.plays)-fa(a.sh.hits,a.sh.plays));
+  const bt=bc.slice(0,9);
+
+  let pc=DUMMY.map(p=>{
+    const ps=p.pitSt[sid]||{plays:0,totalEra:0};
+    return{...p,ps:{plays:ps.plays,era:ps.plays?parseFloat((ps.totalEra/ps.plays).toFixed(3)):9.99}};
+  }).filter(p=>p.ps.plays>=10);
+  const myPsh=ST.myPit.bySt[sid]||{plays:0,totalEra:0};
+  if(myPsh.plays>=10){const e=parseFloat((myPsh.totalEra/myPsh.plays).toFixed(3));pc.push({id:99,name:"나 (플레이어)",ps:{plays:myPsh.plays,era:e},isMine:true});}
+  pc.sort((a,b)=>a.ps.era-b.ps.era);
+  const pt=pc.slice(0,5);
+
+  const batRows=bt.length?bt.map((p,i)=>{
+    const a=fa(p.sh.hits,p.sh.plays);
+    return`<div class="lcard${p.isMine?" mine-bat":""}">
+      <div class="rank-c ${i===0?"r-bat-1":"r-n"}">${i+1}</div>
+      <div class="pinfo">
+        <div class="pname">${p.name}${p.isMine?'<span class="me-tag me-bat">나</span>':''}</div>
+        <div class="pstat">${p.sh.plays}타 ${p.sh.hits}안타 · ${pctStr(p.sh.hits,p.sh.plays)}</div>
+        <div class="mbar"><div class="mfill" style="width:${Math.min(a*250,100)}%;background:${avgColor(a)}"></div></div>
+      </div>
+      <div class="abox"><div class="anum" style="color:${avgColor(a)}">${batAvg(p.sh.hits,p.sh.plays)}</div><div class="asub">타율</div></div>
+    </div>`;
+  }).join(""):`<div class="empty">10회 이상 참여자가 없습니다</div>`;
+
+  const pitRows=pt.length?pt.map((p,i)=>{
+    const e=p.ps.era;
+    return`<div class="lcard${p.isMine?" mine-pit":""}">
+      <div class="rank-c ${i===0?"r-pit-1":"r-n"}">P${i+1}</div>
+      <div class="pinfo">
+        <div class="pname">${p.name}${p.isMine?'<span class="me-tag me-pit">나</span>':''}</div>
+        <div class="pstat">${p.ps.plays}이닝 · ERA ${e}</div>
+        <div class="mbar"><div class="mfill" style="width:${Math.max(0,Math.min(100,100-e*12))}%;background:${eraColor(e)}"></div></div>
+      </div>
+      <div class="abox"><div class="anum" style="color:${eraColor(e)}">${e.toFixed(2)}</div><div class="asub">ERA</div></div>
+    </div>`;
+  }).join(""):`<div class="empty">10회 이상 참여자가 없습니다</div>`;
+
+  document.getElementById("lu-list").innerHTML=`
+    <div class="lu-section">
+      <div class="lu-section-hdr">
+        <span class="lu-badge badge-bat">⚾ BATTER</span>
+        <span class="lu-title">${stock.name} 타자 라인업</span>
+        <span class="lu-sub">적중률 상위 9인</span>
+      </div>${batRows}
+    </div>
+    <div class="sec-divider"></div>
+    <div class="lu-section">
+      <div class="lu-section-hdr">
+        <span class="lu-badge badge-pit">🎯 PITCHER</span>
+        <span class="lu-title">${stock.name} 투수 라인업</span>
+        <span class="lu-sub">ERA 낮은 순 5인</span>
+      </div>${pitRows}
+    </div>`;
+}
+
+function renderAllstar(){
+  let ba=DUMMY.filter(p=>p.plays>=10).map(p=>({...p,a:fa(p.th,p.tp)}));
+  const myTp=Object.values(ST.myBat.bySt).reduce((a,b)=>a+b.plays,0);
+  if(myTp>=10)ba.push({id:99,name:"나 (플레이어)",th:ST.myBat.total,tp:myTp,a:fa(ST.myBat.total,myTp),isMine:true});
+  ba.sort((a,b)=>b.a-a.a);const bt=ba.slice(0,9);
+
+  let pa=DUMMY.filter(p=>p.plays>=10);
+  const myPc=ST.myPit.pitCount;
+  if(myPc>=10)pa.push({id:99,name:"나 (플레이어)",avgEra:parseFloat((ST.myPit.totalEra/myPc).toFixed(3)),plays:myPc,isMine:true});
+  pa.sort((a,b)=>a.avgEra-b.avgEra);const pt=pa.slice(0,5);
+
+  function ricon(i,type){
+    const cls=i===0?(type==="bat"?"r-bat-1":"r-pit-1"):i===1?"r-silver":i===2?"r-bronze":"r-n";
+    const sty=i===0&&type==="bat"?"":i===0&&type==="pit"?"":"";
+    const t=type==="pit"?(i<3?i+1:`P${i+1}`):(i<3?i+1:i+1);
+    return`<div class="rank-c ${cls}">${t}</div>`;
+  }
+
+  const batRows=bt.map((p,i)=>`<div class="lcard${p.isMine?" mine-bat":""}">
+    ${ricon(i,"bat")}
+    <div class="pinfo">
+      <div class="pname">${p.name}${p.isMine?'<span class="me-tag me-bat">나</span>':''}</div>
+      <div class="pstat">${p.tp}타 ${p.th}안타 · ${pctStr(p.th,p.tp)}</div>
+      <div class="mbar"><div class="mfill" style="width:${Math.min(p.a*250,100)}%;background:${avgColor(p.a)}"></div></div>
+    </div>
+    <div class="abox"><div class="anum" style="color:${avgColor(p.a)}">${batAvg(p.th,p.tp)}</div><div class="asub">통산 타율</div></div>
+  </div>`).join("");
+
+  const pitRows=pt.map((p,i)=>{const e=p.avgEra;return`<div class="lcard${p.isMine?" mine-pit":""}">
+    ${ricon(i,"pit")}
+    <div class="pinfo">
+      <div class="pname">${p.name}${p.isMine?'<span class="me-tag me-pit">나</span>':''}</div>
+      <div class="pstat">${p.plays}게임 · 통산 ERA ${e}</div>
+      <div class="mbar"><div class="mfill" style="width:${Math.max(0,Math.min(100,100-e*12))}%;background:${eraColor(e)}"></div></div>
+    </div>
+    <div class="abox"><div class="anum" style="color:${eraColor(e)}">${e.toFixed(2)}</div><div class="asub">통산 ERA</div></div>
+  </div>`;}).join("");
+
+  document.getElementById("as-list").innerHTML=`
+    <div class="lu-section">
+      <div class="lu-section-hdr">
+        <span class="lu-badge badge-bat">⚾ BATTER</span>
+        <span class="lu-title">올스타 타자</span>
+        <span class="lu-sub">전 종목 타율 상위 9인</span>
+      </div>${batRows}
+    </div>
+    <div class="sec-divider"></div>
+    <div class="lu-section">
+      <div class="lu-section-hdr">
+        <span class="lu-badge badge-pit">🎯 PITCHER</span>
+        <span class="lu-title">올스타 투수</span>
+        <span class="lu-sub">전 종목 ERA 하위 5인</span>
+      </div>${pitRows}
+    </div>`;
+
+  document.getElementById("leg-box").innerHTML=`
+    <span style="color:#E83030;font-weight:700">타율:</span> .400↑ 엘리트 · .330↑ 우수 · 미만 일반<br>
+    <span style="color:#5090F8;font-weight:700">ERA:</span> 1.50↓ 에이스 · 3.00↓ 우수 · 초과 일반 · 낮을수록 정확<br>
+    <span style="color:#FFD030;font-weight:700">라인업 자격:</span> 10회 이상 참여 필요`;
+}
+
+/* ── 초기화 ── */
+async function init() {
+  // 로딩 표시
+  document.getElementById("predict-list").innerHTML =
+    '<div style="text-align:center;padding:40px;color:#3A4F70;font-size:13px">주가 데이터를 불러오는 중...</div>';
+  document.getElementById("hdr-score").textContent = "로딩 중...";
+
+  const phase = getMarketPhase();
+  await loadClosePrices();
+
+  if (phase === "open") {
+    // 장 중: 예측 잠금
+    showMarketOpenBlock();
+  } else if (phase === "weekend") {
+    showWeekendBlock();
+  } else {
+    // 장 마감 후 or 익일 장 전: 예측 활성
+    renderPredict();
+  }
+  renderScroll();
+  renderAllstar();
+}
+
+function showMarketOpenBlock() {
+  const now = new Date();
+  const kst = new Date(now.toLocaleString("en-US", {timeZone:"Asia/Seoul"}));
+  const h = kst.getHours(), m = String(kst.getMinutes()).padStart(2,"0");
+  document.getElementById("predict-list").innerHTML = `
+    <div style="background:#0C1120;border:1px solid #18203A;border-radius:14px;padding:32px 20px;text-align:center;margin-top:8px">
+      <div style="font-size:36px;margin-bottom:14px">📈</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px">장이 열려 있습니다</div>
+      <div style="font-size:13px;color:#7A90B0;line-height:1.75;margin-bottom:16px">
+        오늘의 예측은 <strong style="color:#FFD030">장 마감(15:30)</strong> 이후부터<br>
+        가능합니다. 현재 시각 ${h}:${m} KST
+      </div>
+      <div style="background:#131828;border-radius:8px;padding:12px 16px;font-size:12px;color:#7A90B0">
+        종목 라인업·올스타는 상시 확인 가능합니다
+      </div>
+    </div>`;
+  document.getElementById("sub-btn").style.display = "none";
+  document.getElementById("phase-lbl").textContent = "장 중";
+  document.getElementById("phase-lbl").style.color = "#E83030";
+  document.getElementById("hdr-score").textContent = "15:30 이후 예측 가능";
+}
+
+function showWeekendBlock() {
+  document.getElementById("predict-list").innerHTML = `
+    <div style="background:#0C1120;border:1px solid #18203A;border-radius:14px;padding:32px 20px;text-align:center;margin-top:8px">
+      <div style="font-size:36px;margin-bottom:14px">🏖️</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px">주말에는 쉬어갑니다</div>
+      <div style="font-size:13px;color:#7A90B0;line-height:1.75;margin-bottom:16px">
+        주식 시장은 평일에만 운영됩니다.<br>
+        월요일 장 마감 후 다시 예측해보세요.
+      </div>
+      <div style="background:#131828;border-radius:8px;padding:12px 16px;font-size:12px;color:#7A90B0">
+        종목 라인업·올스타는 상시 확인 가능합니다
+      </div>
+    </div>`;
+  document.getElementById("sub-btn").style.display = "none";
+  document.getElementById("phase-lbl").textContent = "주말 휴장";
+  document.getElementById("phase-lbl").style.color = "#7A90B0";
+}
+
+init();
+</script>
+</body>
+</html>
