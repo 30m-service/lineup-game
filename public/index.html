@@ -405,30 +405,7 @@ function genResults(){
   });
 }
 
-function genDummy(){
-  const names=["김민준","이서연","박지호","최유나","정승현","한아름","오동현","신지민","강민서","윤서준","임채원","송예진","황준혁","조다은","류성민","백지수","홍태양","문수아"];
-  const r=sRnd(42);
-  return names.map((name,i)=>{
-    const plays=Math.floor(18+r()*70);
-    const batSt={},pitSt={};
-    STOCKS.forEach(s=>{
-      const sp=Math.floor(plays*(0.35+r()*0.65));
-      batSt[s.id]={plays:sp,hits:Math.floor(sp*(0.2+r()*0.5))};
-      const pp=Math.floor(plays*(0.35+r()*0.65));
-      pitSt[s.id]={plays:pp,totalEra:parseFloat((pp*(0.5+r()*4)).toFixed(3))};
-    });
-    const tp=Object.values(batSt).reduce((a,b)=>a+b.plays,0);
-    const th=Object.values(batSt).reduce((a,b)=>a+b.hits,0);
-    const pv=Object.values(pitSt);
-    const totalPP=pv.reduce((a,b)=>a+b.plays,0);
-    const totalPE=pv.reduce((a,b)=>a+b.totalEra,0);
-    const avgEra=totalPP?parseFloat((totalPE/totalPP).toFixed(3)):9.99;
-    return{id:i,name,plays,tp,th,batSt,pitSt,avgEra};
-  });
-}
-
 const TODAY=genResults();
-const DUMMY=genDummy();
 const ST={tab:0,batPred:{},pitPred:{},submitted:false,myPlays:10,
   myBat:{total:0,bySt:{}},myPit:{pitCount:0,totalEra:0,bySt:{}},
   activeStock:STOCKS[0].id};
@@ -590,45 +567,43 @@ function renderScroll(){
 }
 function chgStock(id){ST.activeStock=id;renderScroll();renderLineup(id);}
 
-function renderLineup(sid){
+function nickOf(p){return p.nickname||"이름없음";}
+
+async function renderLineup(sid){
   ST.activeStock=sid;
   const stock=STOCKS.find(s=>s.id===sid);
+  document.getElementById("lu-list").innerHTML=`<div class="empty">불러오는 중...</div>`;
 
-  let bc=DUMMY.map(p=>({...p,sh:p.batSt[sid]||{plays:0,hits:0}})).filter(p=>p.sh.plays>=10);
-  const myBsh=ST.myBat.bySt[sid]||{plays:0,hits:0};
-  if(myBsh.plays>=10)bc.push({id:99,name:"나 (플레이어)",sh:myBsh,isMine:true});
-  bc.sort((a,b)=>fa(b.sh.hits,b.sh.plays)-fa(a.sh.hits,a.sh.plays));
-  const bt=bc.slice(0,9);
+  const [{data:bt,error:be},{data:pt,error:pe}]=await Promise.all([
+    sb.rpc('lineup_stock_batters',{p_stock_code:sid}),
+    sb.rpc('lineup_stock_pitchers',{p_stock_code:sid}),
+  ]);
+  if(be) console.error('타자 라인업 조회 실패:', be.message);
+  if(pe) console.error('투수 라인업 조회 실패:', pe.message);
+  if(ST.activeStock!==sid) return; // 응답 오는 사이 다른 종목으로 이동했으면 폐기
 
-  let pc=DUMMY.map(p=>{
-    const ps=p.pitSt[sid]||{plays:0,totalEra:0};
-    return{...p,ps:{plays:ps.plays,era:ps.plays?parseFloat((ps.totalEra/ps.plays).toFixed(3)):9.99}};
-  }).filter(p=>p.ps.plays>=10);
-  const myPsh=ST.myPit.bySt[sid]||{plays:0,totalEra:0};
-  if(myPsh.plays>=10){const e=parseFloat((myPsh.totalEra/myPsh.plays).toFixed(3));pc.push({id:99,name:"나 (플레이어)",ps:{plays:myPsh.plays,era:e},isMine:true});}
-  pc.sort((a,b)=>a.ps.era-b.ps.era);
-  const pt=pc.slice(0,5);
-
-  const batRows=bt.length?bt.map((p,i)=>{
-    const a=fa(p.sh.hits,p.sh.plays);
-    return`<div class="lcard${p.isMine?" mine-bat":""}">
+  const batRows=(bt&&bt.length)?bt.map((p,i)=>{
+    const a=fa(p.hits,p.plays);
+    const mine=p.user_id===currentUserId;
+    return`<div class="lcard${mine?" mine-bat":""}">
       <div class="rank-c ${i===0?"r-bat-1":"r-n"}">${i+1}</div>
       <div class="pinfo">
-        <div class="pname">${p.name}${p.isMine?'<span class="me-tag me-bat">나</span>':''}</div>
-        <div class="pstat">${p.sh.plays}타 ${p.sh.hits}안타 · ${pctStr(p.sh.hits,p.sh.plays)}</div>
+        <div class="pname">${nickOf(p)}${mine?'<span class="me-tag me-bat">나</span>':''}</div>
+        <div class="pstat">${p.plays}타 ${p.hits}안타 · ${pctStr(p.hits,p.plays)}</div>
         <div class="mbar"><div class="mfill" style="width:${Math.min(a*250,100)}%;background:${avgColor(a)}"></div></div>
       </div>
-      <div class="abox"><div class="anum" style="color:${avgColor(a)}">${batAvg(p.sh.hits,p.sh.plays)}</div><div class="asub">타율</div></div>
+      <div class="abox"><div class="anum" style="color:${avgColor(a)}">${batAvg(p.hits,p.plays)}</div><div class="asub">타율</div></div>
     </div>`;
   }).join(""):`<div class="empty">10회 이상 참여자가 없습니다</div>`;
 
-  const pitRows=pt.length?pt.map((p,i)=>{
-    const e=p.ps.era;
-    return`<div class="lcard${p.isMine?" mine-pit":""}">
+  const pitRows=(pt&&pt.length)?pt.map((p,i)=>{
+    const e=Number(p.avg_era);
+    const mine=p.user_id===currentUserId;
+    return`<div class="lcard${mine?" mine-pit":""}">
       <div class="rank-c ${i===0?"r-pit-1":"r-n"}">P${i+1}</div>
       <div class="pinfo">
-        <div class="pname">${p.name}${p.isMine?'<span class="me-tag me-pit">나</span>':''}</div>
-        <div class="pstat">${p.ps.plays}이닝 · ERA ${e}</div>
+        <div class="pname">${nickOf(p)}${mine?'<span class="me-tag me-pit">나</span>':''}</div>
+        <div class="pstat">${p.plays}이닝 · ERA ${e}</div>
         <div class="mbar"><div class="mfill" style="width:${Math.max(0,Math.min(100,100-e*12))}%;background:${eraColor(e)}"></div></div>
       </div>
       <div class="abox"><div class="anum" style="color:${eraColor(e)}">${e.toFixed(2)}</div><div class="asub">ERA</div></div>
@@ -653,43 +628,49 @@ function renderLineup(sid){
     </div>`;
 }
 
-function renderAllstar(){
-  let ba=DUMMY.filter(p=>p.plays>=10).map(p=>({...p,a:fa(p.th,p.tp)}));
-  const myTp=Object.values(ST.myBat.bySt).reduce((a,b)=>a+b.plays,0);
-  if(myTp>=10)ba.push({id:99,name:"나 (플레이어)",th:ST.myBat.total,tp:myTp,a:fa(ST.myBat.total,myTp),isMine:true});
-  ba.sort((a,b)=>b.a-a.a);const bt=ba.slice(0,9);
+function ricon(i,type){
+  const cls=i===0?(type==="bat"?"r-bat-1":"r-pit-1"):i===1?"r-silver":i===2?"r-bronze":"r-n";
+  const t=type==="pit"?(i<3?i+1:`P${i+1}`):i+1;
+  return`<div class="rank-c ${cls}">${t}</div>`;
+}
 
-  let pa=DUMMY.filter(p=>p.plays>=10);
-  const myPc=ST.myPit.pitCount;
-  if(myPc>=10)pa.push({id:99,name:"나 (플레이어)",avgEra:parseFloat((ST.myPit.totalEra/myPc).toFixed(3)),plays:myPc,isMine:true});
-  pa.sort((a,b)=>a.avgEra-b.avgEra);const pt=pa.slice(0,5);
+async function renderAllstar(){
+  document.getElementById("as-list").innerHTML=`<div class="empty">불러오는 중...</div>`;
 
-  function ricon(i,type){
-    const cls=i===0?(type==="bat"?"r-bat-1":"r-pit-1"):i===1?"r-silver":i===2?"r-bronze":"r-n";
-    const sty=i===0&&type==="bat"?"":i===0&&type==="pit"?"":"";
-    const t=type==="pit"?(i<3?i+1:`P${i+1}`):(i<3?i+1:i+1);
-    return`<div class="rank-c ${cls}">${t}</div>`;
-  }
+  const [{data:bt,error:be},{data:pt,error:pe}]=await Promise.all([
+    sb.rpc('lineup_allstar_batters'),
+    sb.rpc('lineup_allstar_pitchers'),
+  ]);
+  if(be) console.error('올스타 타자 조회 실패:', be.message);
+  if(pe) console.error('올스타 투수 조회 실패:', pe.message);
 
-  const batRows=bt.map((p,i)=>`<div class="lcard${p.isMine?" mine-bat":""}">
+  const batRows=(bt&&bt.length)?bt.map((p,i)=>{
+    const a=fa(p.hits,p.plays);
+    const mine=p.user_id===currentUserId;
+    return`<div class="lcard${mine?" mine-bat":""}">
     ${ricon(i,"bat")}
     <div class="pinfo">
-      <div class="pname">${p.name}${p.isMine?'<span class="me-tag me-bat">나</span>':''}</div>
-      <div class="pstat">${p.tp}타 ${p.th}안타 · ${pctStr(p.th,p.tp)}</div>
-      <div class="mbar"><div class="mfill" style="width:${Math.min(p.a*250,100)}%;background:${avgColor(p.a)}"></div></div>
+      <div class="pname">${nickOf(p)}${mine?'<span class="me-tag me-bat">나</span>':''}</div>
+      <div class="pstat">${p.plays}타 ${p.hits}안타 · ${pctStr(p.hits,p.plays)}</div>
+      <div class="mbar"><div class="mfill" style="width:${Math.min(a*250,100)}%;background:${avgColor(a)}"></div></div>
     </div>
-    <div class="abox"><div class="anum" style="color:${avgColor(p.a)}">${batAvg(p.th,p.tp)}</div><div class="asub">통산 타율</div></div>
-  </div>`).join("");
+    <div class="abox"><div class="anum" style="color:${avgColor(a)}">${batAvg(p.hits,p.plays)}</div><div class="asub">통산 타율</div></div>
+  </div>`;
+  }).join(""):`<div class="empty">10회 이상 참여자가 없습니다</div>`;
 
-  const pitRows=pt.map((p,i)=>{const e=p.avgEra;return`<div class="lcard${p.isMine?" mine-pit":""}">
+  const pitRows=(pt&&pt.length)?pt.map((p,i)=>{
+    const e=Number(p.avg_era);
+    const mine=p.user_id===currentUserId;
+    return`<div class="lcard${mine?" mine-pit":""}">
     ${ricon(i,"pit")}
     <div class="pinfo">
-      <div class="pname">${p.name}${p.isMine?'<span class="me-tag me-pit">나</span>':''}</div>
+      <div class="pname">${nickOf(p)}${mine?'<span class="me-tag me-pit">나</span>':''}</div>
       <div class="pstat">${p.plays}게임 · 통산 ERA ${e}</div>
       <div class="mbar"><div class="mfill" style="width:${Math.max(0,Math.min(100,100-e*12))}%;background:${eraColor(e)}"></div></div>
     </div>
     <div class="abox"><div class="anum" style="color:${eraColor(e)}">${e.toFixed(2)}</div><div class="asub">통산 ERA</div></div>
-  </div>`;}).join("");
+  </div>`;
+  }).join(""):`<div class="empty">10회 이상 참여자가 없습니다</div>`;
 
   document.getElementById("as-list").innerHTML=`
     <div class="lu-section">
