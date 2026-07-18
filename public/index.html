@@ -81,11 +81,9 @@ body{background:#070B16;color:#E8ECF8;font-family:'Paperlogy',-apple-system,sans
 .divider-label::after{content:'';flex:1;height:1px;background:#18203A}
 
 .price-row{display:flex;gap:8px;align-items:center}
-.price-input{flex:1;background:#06090F;border:1px solid #18203A;border-radius:7px;padding:8px 10px;color:#E8ECF8;font-size:13px;font-weight:700;outline:none;transition:border-color .2s}
+.price-input{flex:1;background:#06090F;border:1px solid #18203A;border-radius:7px;padding:8px 10px;color:#E8ECF8;font-size:13px;font-weight:700;outline:none;transition:border-color .2s;cursor:pointer}
 .price-input:focus{border-color:#3070E8}
 .price-input:disabled{color:#7A90B0;cursor:default}
-.price-input::placeholder{font-size:11px;font-weight:400;color:#4A6080}
-.won{font-size:12px;color:#7A90B0;flex-shrink:0}
 .pit-result{margin-top:7px;background:#131828;border-radius:7px;padding:7px 10px;font-size:11px;line-height:1.7}
 
 .sub-btn{width:100%;padding:13px;margin-top:7px;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s}
@@ -236,6 +234,9 @@ const STOCKS=[
   {id:"005490",name:"POSCO홀딩스",sector:"철강",price:null},
 ];
 
+// 투수 모드: -30% ~ +30%, 1% 단위 콤보박스 옵션
+const PCT_OPTIONS = Array.from({length:61}, (_,i)=>i-30);
+
 /* ── Supabase 연동 ── */
 const SUPABASE_URL = 'https://cdlplhomkrwnybedesgz.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_K5M6b3yeKhgWxX86tOQYdQ_qWaxtbjE';
@@ -289,13 +290,13 @@ async function ensureUserRow(){
 async function loadTodayPredictions(){
   const tradeDate = getTargetTradeDate();
   const { data, error } = await sb.from('lineup_predictions')
-    .select('stock_code,bat_choice,pitcher_price')
+    .select('stock_code,bat_choice,pitcher_pct')
     .eq('user_id', currentUserId).eq('trade_date', tradeDate);
   if(error){ console.error('예측 기록 조회 실패:', error.message); return; }
   if(data && data.length){
     data.forEach(row=>{
       if(row.bat_choice) ST.batPred[row.stock_code]=row.bat_choice;
-      if(row.pitcher_price!=null) ST.pitPred[row.stock_code]=row.pitcher_price;
+      if(row.pitcher_pct!=null) ST.pitPred[row.stock_code]=row.pitcher_pct;
     });
     ST.submitted = true;
   }
@@ -308,7 +309,7 @@ async function savePredictions(){
     stock_code: s.id,
     trade_date: tradeDate,
     bat_choice: ST.batPred[s.id] ?? null,
-    pitcher_price: ST.pitPred[s.id] ?? null,
+    pitcher_pct: ST.pitPred[s.id] ?? null,
     base_close_price: s.price,
   }));
   const { error } = await sb.from('lineup_predictions')
@@ -476,16 +477,14 @@ function card(s){
 
   let pitRes="";
   if(ST.submitted&&myP!=null){
-    const diff=Math.abs(act.close-myP);
-    const dp=parseFloat((diff/act.close*100).toFixed(2));
-    const era=parseFloat((diff/act.close*100).toFixed(3));
-    const g=dp<=0.5?"great":dp<=2?"good":"miss";
+    const era=parseFloat(Math.abs(act.pct-myP).toFixed(3));
+    const g=era<=1?"great":era<=3?"good":"miss";
     const gc=g==="great"?"#40C880":g==="good"?"#FFD030":"#E83030";
     const gl=g==="great"?"◎ 매우 근접":g==="good"?"○ 근접":"△ 빗나감";
     pitRes=`<div class="pit-result">
       <span style="color:${gc};font-weight:700">${gl}</span>
-      <span style="color:#7A90B0;margin-left:6px">실제 ${fmt(act.close)}원</span><br>
-      <span style="color:#7A90B0">오차 ${fmt(diff)}원 (${dp}%) · ERA ${era}</span>
+      <span style="color:#7A90B0;margin-left:6px">실제 ${act.pct>=0?"+":""}${act.pct}% · 예측 ${myP>=0?"+":""}${myP}%</span><br>
+      <span style="color:#7A90B0">오차 ${era}%p · ERA ${era}</span>
     </div>`;
   }
 
@@ -501,12 +500,12 @@ function card(s){
       ${resTag}
     </div>
     <div class="choices">${btns}</div>
-    <div class="divider-label">투수 · 예상 종가</div>
+    <div class="divider-label">투수 · 예상 등락률</div>
     <div class="price-row">
-      <input class="price-input" type="number" placeholder="내일 종가 예측 (오늘 종가 참고)"
-        ${ST.submitted?"disabled":""} value="${myP!=null?myP:""}"
-        oninput="pickPit('${s.id}',this.value)">
-      <span class="won">원</span>
+      <select class="price-input" ${ST.submitted?"disabled":""} onchange="pickPit('${s.id}',this.value)">
+        <option value=""${myP==null?" selected":""}>등락률 선택</option>
+        ${PCT_OPTIONS.map(v=>`<option value="${v}"${myP===v?" selected":""}>${v>0?"+":""}${v}%</option>`).join("")}
+      </select>
     </div>
     ${pitRes}
   </div>`;
@@ -515,9 +514,9 @@ function card(s){
 function pickBat(id,val){if(ST.submitted)return;ST.batPred[id]=val;renderPredict();}
 function pickPit(id,val){
   if(ST.submitted)return;
-  const n=parseInt(val);
-  if(!isNaN(n)&&n>0)ST.pitPred[id]=n;else delete ST.pitPred[id];
-  updateSubBtn();updateHdr();
+  const n=parseInt(val,10);
+  if(!isNaN(n))ST.pitPred[id]=n;else delete ST.pitPred[id];
+  renderPredict();
 }
 function allDone(){return STOCKS.every(s=>ST.batPred[s.id])&&STOCKS.every(s=>ST.pitPred[s.id]!=null);}
 function doneCount(){return{b:STOCKS.filter(s=>ST.batPred[s.id]).length,p:STOCKS.filter(s=>ST.pitPred[s.id]!=null).length};}
@@ -525,7 +524,7 @@ function updateSubBtn(){
   const btn=document.getElementById("sub-btn");
   if(ST.submitted){btn.style.display="none";return;}
   if(allDone()){btn.className="sub-btn ready";btn.textContent="오늘 예측 제출하기";}
-  else{const {b,p}=doneCount();btn.className="sub-btn off";btn.textContent=`상승/하락 ${b}/10 · 예상가 ${p}/10 — 모두 입력해 주세요`;}
+  else{const {b,p}=doneCount();btn.className="sub-btn off";btn.textContent=`상승/하락 ${b}/10 · 등락률 ${p}/10 — 모두 입력해 주세요`;}
 }
 function updateHdr(){
   if(ST.submitted){
@@ -552,8 +551,7 @@ async function doSubmit(){
     if(hit)hits++;
     const pb=ST.myBat.bySt[s.id]||{plays:0,hits:0};
     ST.myBat.bySt[s.id]={plays:pb.plays+1,hits:pb.hits+(hit?1:0)};
-    const diff=Math.abs(act.close-ST.pitPred[s.id]);
-    const era=parseFloat((diff/act.close*100).toFixed(3));
+    const era=parseFloat(Math.abs(act.pct-ST.pitPred[s.id]).toFixed(3));
     eras.push(era);
     const pp=ST.myPit.bySt[s.id]||{plays:0,totalEra:0};
     ST.myPit.bySt[s.id]={plays:pp.plays+1,totalEra:parseFloat((pp.totalEra+era).toFixed(3))};

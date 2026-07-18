@@ -37,7 +37,7 @@ export default async function handler(req, res) {
     // 1. 오늘 날짜 · 미채점 예측 조회
     const listUrl = `${SUPABASE_URL}/rest/v1/lineup_predictions`
       + `?trade_date=eq.${today}&actual_close_price=is.null`
-      + `&select=id,stock_code,bat_choice,pitcher_price,base_close_price`;
+      + `&select=id,stock_code,bat_choice,pitcher_pct,base_close_price`;
     const listRes = await fetch(listUrl, { headers: sbHeaders });
     if (!listRes.ok) throw new Error(`Supabase 조회 오류: ${listRes.status}`);
     const predictions = await listRes.json();
@@ -63,15 +63,15 @@ export default async function handler(req, res) {
       }
 
       const update = { actual_close_price: actual };
+      const actualPct = ((actual - p.base_close_price) / p.base_close_price) * 100;
 
       if (p.bat_choice) {
-        const pct = ((actual - p.base_close_price) / p.base_close_price) * 100;
-        const result = pct >= 1 ? 'up' : pct <= -1 ? 'down' : 'flat';
+        const result = actualPct >= 1 ? 'up' : actualPct <= -1 ? 'down' : 'flat';
         update.is_hit = result === p.bat_choice;
       }
 
-      if (p.pitcher_price != null) {
-        update.era_value = parseFloat((Math.abs(p.pitcher_price - actual) / actual * 100).toFixed(3));
+      if (p.pitcher_pct != null) {
+        update.era_value = parseFloat(Math.abs(p.pitcher_pct - actualPct).toFixed(3));
       }
 
       const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/lineup_predictions?id=eq.${p.id}`, {
