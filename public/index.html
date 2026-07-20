@@ -168,6 +168,13 @@ body{background:#070B16;color:#E8ECF8;font-family:'Paperlogy',-apple-system,sans
 .modal-input.err{border-color:#E83030}
 .modal-error{font-size:12px;color:#E83030;margin:-8px 0 12px}
 .modal-btn{width:100%;padding:12px;border:none;border-radius:9px;background:#E83030;color:#fff;font-size:14px;font-weight:700;cursor:pointer}
+
+/* 사용법 안내 모달 */
+.ob-close{position:absolute;top:14px;right:14px;background:none;border:none;color:#7A90B0;font-size:16px;cursor:pointer;line-height:1;padding:4px}
+.ob-step{display:flex;gap:10px;margin-bottom:14px;align-items:flex-start}
+.ob-num{flex-shrink:0;width:22px;height:22px;border-radius:50%;background:#E83030;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.ob-title{font-size:13px;font-weight:700;margin-bottom:2px}
+.ob-desc{font-size:12px;color:#7A90B0;line-height:1.5}
 </style>
 </head>
 <body>
@@ -262,6 +269,42 @@ body{background:#070B16;color:#E8ECF8;font-family:'Paperlogy',-apple-system,sans
       <div style="font-size:12px;color:#7A90B0;line-height:1.7;margin:6px 0 16px" id="magic-link-sent-text"></div>
       <button class="modal-btn" onclick="hideMagicLinkModal()">닫기</button>
     </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="onboard-modal">
+  <div class="modal-box" style="max-width:360px;text-align:left;position:relative">
+    <button class="ob-close" onclick="hideOnboardModal()">✕</button>
+    <div class="modal-title" style="margin-bottom:16px">LINE UP ↑↓ 사용법</div>
+    <div class="ob-step">
+      <div class="ob-num">1</div>
+      <div>
+        <div class="ob-title">무엇을 하는 게임인가요?</div>
+        <div class="ob-desc">KOSPI 시총 상위 10종목의 내일 주가를 예측하는 게임이에요.</div>
+      </div>
+    </div>
+    <div class="ob-step">
+      <div class="ob-num">2</div>
+      <div>
+        <div class="ob-title">⚾ 타자 모드</div>
+        <div class="ob-desc">종목별로 상승 / 보합 / 하락 중 하나를 선택해요.</div>
+      </div>
+    </div>
+    <div class="ob-step">
+      <div class="ob-num">3</div>
+      <div>
+        <div class="ob-title">🎯 투수 모드</div>
+        <div class="ob-desc">예상 등락률(-30%~+30%)을 콤보박스에서 선택해요.</div>
+      </div>
+    </div>
+    <div class="ob-step" style="margin-bottom:6px">
+      <div class="ob-num">4</div>
+      <div>
+        <div class="ob-title">결과는 언제 나오나요?</div>
+        <div class="ob-desc">제출 즉시가 아니라 다음 거래일 장 마감 후 자동으로 채점돼요. 3회 이상 참여하면 라인업·올스타 랭킹에 이름이 올라가요.</div>
+      </div>
+    </div>
+    <button class="modal-btn" onclick="hideOnboardModal()">확인했어요</button>
   </div>
 </div>
 
@@ -381,14 +424,25 @@ async function initAuth(){
 function renderAccountBar(){
   const bar=document.getElementById('acct-bar');
   if(!bar) return;
+  const helpBtn=`<button class="acct-link" onclick="showOnboardModal()">❓ 사용법</button>`;
   if(userEmail){
     bar.innerHTML=`<span class="acct-text">✉️ ${userEmail}로 로그인됨</span>
-      <button class="acct-link" onclick="signOutUser()">로그아웃</button>`;
+      <button class="acct-link" onclick="signOutUser()">로그아웃</button>${helpBtn}`;
   }else{
     bar.innerHTML=`<span class="acct-text">익명으로 플레이 중</span>
       <button class="acct-link" onclick="showEmailLinkModal()">이메일로 기록 저장</button>
-      <button class="acct-link" onclick="showMagicLinkModal()">다른 기기에서 로그인</button>`;
+      <button class="acct-link" onclick="showMagicLinkModal()">다른 기기에서 로그인</button>${helpBtn}`;
   }
+}
+
+// 첫 방문 시 자동으로 사용법 안내, 이후에는 헤더의 "❓ 사용법" 버튼으로만 다시 볼 수 있음
+const ONBOARD_KEY='lineup_onboarded_v1';
+function showOnboardModal(){
+  document.getElementById('onboard-modal').style.display='flex';
+}
+function hideOnboardModal(){
+  document.getElementById('onboard-modal').style.display='none';
+  localStorage.setItem(ONBOARD_KEY,'1');
 }
 
 function showEmailLinkModal(){
@@ -987,6 +1041,7 @@ function showWeekendBlock() {
   document.getElementById("hdr-score").textContent = "월요일 장 마감 후 예측 가능";
 }
 
+if(!localStorage.getItem(ONBOARD_KEY)) showOnboardModal();
 init();
 </script>
 </body>
