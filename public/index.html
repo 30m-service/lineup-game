@@ -154,6 +154,11 @@ body{background:#070B16;color:#E8ECF8;font-family:'Paperlogy',-apple-system,sans
 
 .leg{background:#0C1120;border:1px solid #18203A;border-radius:9px;padding:11px 13px;margin-top:7px;font-size:11px;color:#7A90B0;line-height:1.85}
 
+/* 계정 바 */
+.acct-bar{display:flex;align-items:center;gap:10px;padding:7px 16px;font-size:11px;color:#7A90B0;flex-wrap:wrap}
+.acct-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-link{background:none;border:none;color:#5090F8;font-size:11px;cursor:pointer;padding:0;text-decoration:underline;white-space:nowrap;flex-shrink:0}
+
 /* 닉네임 모달 */
 .modal-overlay{position:fixed;inset:0;background:#04060Bcc;display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
 .modal-box{background:#0C1120;border:1px solid #18203A;border-radius:14px;padding:22px 18px;width:100%;max-width:340px}
@@ -184,6 +189,7 @@ body{background:#070B16;color:#E8ECF8;font-family:'Paperlogy',-apple-system,sans
     <button class="tab" id="t1" onclick="showTab(1)">종목 라인업</button>
     <button class="tab" id="t2" onclick="showTab(2)">올스타</button>
   </div>
+  <div class="acct-bar" id="acct-bar"></div>
 </div>
 
 <div class="content show" id="tab0">
@@ -220,6 +226,42 @@ body{background:#070B16;color:#E8ECF8;font-family:'Paperlogy',-apple-system,sans
       oninput="document.getElementById('nick-error').style.display='none';this.classList.remove('err')">
     <div class="modal-error" id="nick-error" style="display:none">이미 사용 중인 닉네임입니다</div>
     <button class="modal-btn" onclick="submitNickname()">확인</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="email-link-modal">
+  <div class="modal-box">
+    <div id="email-link-form">
+      <div class="modal-title">이메일로 예측 기록을 저장하세요</div>
+      <input class="modal-input" id="email-link-input" type="email" placeholder="이메일 주소"
+        oninput="document.getElementById('email-link-error').style.display='none';this.classList.remove('err')">
+      <div class="modal-error" id="email-link-error" style="display:none"></div>
+      <button class="modal-btn" onclick="submitEmailLink()">확인 메일 보내기</button>
+    </div>
+    <div id="email-link-sent" style="display:none;text-align:center">
+      <div style="font-size:32px;margin-bottom:10px">📩</div>
+      <div class="modal-title">메일을 보냈습니다</div>
+      <div style="font-size:12px;color:#7A90B0;line-height:1.7;margin:6px 0 16px" id="email-link-sent-text"></div>
+      <button class="modal-btn" onclick="hideEmailLinkModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="magic-link-modal">
+  <div class="modal-box">
+    <div id="magic-link-form">
+      <div class="modal-title">다른 기기에서 로그인</div>
+      <input class="modal-input" id="magic-link-input" type="email" placeholder="가입한 이메일 주소"
+        oninput="document.getElementById('magic-link-error').style.display='none';this.classList.remove('err')">
+      <div class="modal-error" id="magic-link-error" style="display:none"></div>
+      <button class="modal-btn" onclick="submitMagicLink()">로그인 링크 받기</button>
+    </div>
+    <div id="magic-link-sent" style="display:none;text-align:center">
+      <div style="font-size:32px;margin-bottom:10px">📩</div>
+      <div class="modal-title">로그인 링크를 보냈습니다</div>
+      <div style="font-size:12px;color:#7A90B0;line-height:1.7;margin:6px 0 16px" id="magic-link-sent-text"></div>
+      <button class="modal-btn" onclick="hideMagicLinkModal()">닫기</button>
+    </div>
   </div>
 </div>
 
@@ -285,6 +327,26 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUserId = null;
 let currentNickname = null;
+let userEmail = null;
+
+// 이메일 연결(익명→영구 계정 승격)이나 매직링크 로그인이 완료되면 Supabase가
+// 이 이벤트를 발생시킨다. currentUserId가 아직 없으면(최초 로딩 중) initAuth()가
+// 직접 처리하므로 건너뛴다.
+sb.auth.onAuthStateChange(async (event, session) => {
+  if(!session || !currentUserId) return;
+  const uidChanged = session.user.id !== currentUserId;
+  currentUserId = session.user.id;
+  userEmail = session.user.email || null;
+  await ensureUserRow();
+  if(uidChanged){
+    ST.batPred={}; ST.pitPred={}; ST.graded={}; ST.submitted=false;
+    await loadTodayPredictions();
+    renderPredictArea();
+    if(ST.tab===1){ renderScroll(); renderLineup(ST.activeStock); }
+    else if(ST.tab===2){ renderAllstar(); }
+  }
+  renderAccountBar();
+});
 
 // trade_date는 "제출 시각"이 아니라 "이 예측이 맞히려는 실제 거래일(다음 종가)"을 의미해야
 // /api/settle-results의 "trade_date = 오늘" 조회와 맞아떨어진다.
@@ -306,10 +368,92 @@ async function initAuth(){
       session = data.session;
     }
     currentUserId = session.user.id;
+    userEmail = session.user.email || null;
     await ensureUserRow();
   }catch(e){
     console.error('Supabase 인증 실패:', e.message);
   }
+}
+
+function renderAccountBar(){
+  const bar=document.getElementById('acct-bar');
+  if(!bar) return;
+  if(userEmail){
+    bar.innerHTML=`<span class="acct-text">✉️ ${userEmail}로 로그인됨</span>
+      <button class="acct-link" onclick="signOutUser()">로그아웃</button>`;
+  }else{
+    bar.innerHTML=`<span class="acct-text">익명으로 플레이 중</span>
+      <button class="acct-link" onclick="showEmailLinkModal()">이메일로 기록 저장</button>
+      <button class="acct-link" onclick="showMagicLinkModal()">다른 기기에서 로그인</button>`;
+  }
+}
+
+function showEmailLinkModal(){
+  document.getElementById('email-link-form').style.display='block';
+  document.getElementById('email-link-sent').style.display='none';
+  document.getElementById('email-link-error').style.display='none';
+  const input=document.getElementById('email-link-input');
+  input.value=''; input.classList.remove('err');
+  document.getElementById('email-link-modal').style.display='flex';
+  input.focus();
+}
+function hideEmailLinkModal(){
+  document.getElementById('email-link-modal').style.display='none';
+}
+async function submitEmailLink(){
+  const input=document.getElementById('email-link-input');
+  const errBox=document.getElementById('email-link-error');
+  const email=input.value.trim();
+  if(!email) return;
+  const { error } = await sb.auth.updateUser({ email }, { emailRedirectTo: window.location.origin });
+  if(error){
+    errBox.textContent=error.message;
+    errBox.style.display='block';
+    input.classList.add('err');
+    return;
+  }
+  document.getElementById('email-link-form').style.display='none';
+  document.getElementById('email-link-sent-text').textContent=
+    `${email}로 확인 메일을 보냈습니다. 메일함에서 링크를 눌러 완료해주세요.`;
+  document.getElementById('email-link-sent').style.display='block';
+}
+
+function showMagicLinkModal(){
+  document.getElementById('magic-link-form').style.display='block';
+  document.getElementById('magic-link-sent').style.display='none';
+  document.getElementById('magic-link-error').style.display='none';
+  const input=document.getElementById('magic-link-input');
+  input.value=''; input.classList.remove('err');
+  document.getElementById('magic-link-modal').style.display='flex';
+  input.focus();
+}
+function hideMagicLinkModal(){
+  document.getElementById('magic-link-modal').style.display='none';
+}
+async function submitMagicLink(){
+  const input=document.getElementById('magic-link-input');
+  const errBox=document.getElementById('magic-link-error');
+  const email=input.value.trim();
+  if(!email) return;
+  const { error } = await sb.auth.signInWithOtp({
+    email,
+    options:{ emailRedirectTo: window.location.origin, shouldCreateUser:false }
+  });
+  if(error){
+    errBox.textContent=error.message;
+    errBox.style.display='block';
+    input.classList.add('err');
+    return;
+  }
+  document.getElementById('magic-link-form').style.display='none';
+  document.getElementById('magic-link-sent-text').textContent=
+    `${email}로 로그인 링크를 보냈습니다. 메일함에서 링크를 눌러주세요.`;
+  document.getElementById('magic-link-sent').style.display='block';
+}
+
+async function signOutUser(){
+  await sb.auth.signOut();
+  location.reload();
 }
 
 async function ensureUserRow(){
@@ -741,17 +885,8 @@ async function renderAllstar(){
 }
 
 /* ── 초기화 ── */
-async function init() {
-  // 로딩 표시
-  document.getElementById("predict-list").innerHTML =
-    '<div style="text-align:center;padding:40px;color:#3A4F70;font-size:13px">주가 데이터를 불러오는 중...</div>';
-  document.getElementById("hdr-score").textContent = "로딩 중...";
-
+function renderPredictArea(){
   const phase = getMarketPhase();
-  await loadClosePrices();
-  await initAuth();
-  await loadTodayPredictions();
-
   if (phase === "open") {
     // 장 중: 예측 잠금
     showMarketOpenBlock();
@@ -762,6 +897,20 @@ async function init() {
     renderPredict();
     if (ST.submitted) { markSubmittedPhase(); renderSubmittedSummary(); }
   }
+}
+
+async function init() {
+  // 로딩 표시
+  document.getElementById("predict-list").innerHTML =
+    '<div style="text-align:center;padding:40px;color:#3A4F70;font-size:13px">주가 데이터를 불러오는 중...</div>';
+  document.getElementById("hdr-score").textContent = "로딩 중...";
+
+  await loadClosePrices();
+  await initAuth();
+  await loadTodayPredictions();
+
+  renderPredictArea();
+  renderAccountBar();
   renderScroll();
   renderAllstar();
 }
