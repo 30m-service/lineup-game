@@ -290,13 +290,21 @@ async function ensureUserRow(){
 async function loadTodayPredictions(){
   const tradeDate = getTargetTradeDate();
   const { data, error } = await sb.from('lineup_predictions')
-    .select('stock_code,bat_choice,pitcher_pct')
+    .select('stock_code,bat_choice,pitcher_pct,is_hit,era_value,actual_close_price,base_close_price')
     .eq('user_id', currentUserId).eq('trade_date', tradeDate);
   if(error){ console.error('예측 기록 조회 실패:', error.message); return; }
   if(data && data.length){
     data.forEach(row=>{
       if(row.bat_choice) ST.batPred[row.stock_code]=row.bat_choice;
       if(row.pitcher_pct!=null) ST.pitPred[row.stock_code]=row.pitcher_pct;
+      if(row.actual_close_price!=null){
+        ST.graded[row.stock_code]={
+          is_hit: row.is_hit,
+          era_value: row.era_value,
+          actual_close_price: row.actual_close_price,
+          base_close_price: row.base_close_price,
+        };
+      }
     });
     ST.submitted = true;
   }
@@ -390,24 +398,7 @@ async function loadClosePrices() {
   }
 }
 
-function sRnd(seed){let s=seed;return()=>{s=(s*9301+49297)%233280;return s/233280}}
-
-function genResults(){
-  // 익일 결과는 실제 서비스에서 다음날 장 마감 후 API로 수신
-  // 데모: 날짜 기반 시드로 가상 결과 생성
-  const r=sRnd(new Date().getDate()*137+new Date().getMonth()*31+5);
-  return STOCKS.map(s=>{
-    const v=r();const res=v<0.38?"up":v<0.62?"flat":"down";
-    const pct=res==="up"?(1+r()*4):res==="down"?-(1+r()*3):(r()*1.8-0.9);
-    const p=parseFloat(pct.toFixed(2));
-    const base = s.price || 100000;
-    return{id:s.id,result:res,pct:p,close:Math.round(base*(1+p/100))};
-  });
-}
-
-const TODAY=genResults();
-const ST={tab:0,batPred:{},pitPred:{},submitted:false,myPlays:10,
-  myBat:{total:0,bySt:{}},myPit:{pitCount:0,totalEra:0,bySt:{}},
+const ST={tab:0,batPred:{},pitPred:{},submitted:false,graded:{},
   activeStock:STOCKS[0].id};
 
 function fa(h,p){return p?h/p:0}
@@ -434,38 +425,47 @@ function renderPredict(){
 }
 
 function card(s){
-  const act=TODAY.find(r=>r.id===s.id);
   const myC=ST.batPred[s.id];
   const myP=ST.pitPred[s.id];
-  const batOk=ST.submitted&&myC===act.result;
-  const batNg=ST.submitted&&myC&&myC!==act.result;
+  const g=ST.graded[s.id]; // 스케줄러가 채점을 마친 경우에만 존재
+
+  let actualPct=null, actualResult=null;
+  if(g){
+    actualPct=parseFloat((((g.actual_close_price-g.base_close_price)/g.base_close_price)*100).toFixed(2));
+    actualResult=actualPct>=1?"up":actualPct<=-1?"down":"flat";
+  }
   let cls="";
-  if(ST.submitted) cls=batOk&&myP!=null?" correct":" wrong";
+  if(g) cls = g.is_hit ? " correct" : " wrong";
 
   const btns=[
     {v:"up",c:"up",l:"▲ 상승",s:"+1% 이상"},
     {v:"flat",c:"flat",l:"━ 보합",s:"-1 ~ +1%"},
     {v:"down",c:"dn",l:"▼ 하락",s:"-1% 이상"},
   ].map(b=>{
-    const sel=myC===b.v, ac=ST.submitted&&act.result===b.v;
+    const sel=myC===b.v, ac=g&&actualResult===b.v;
     return`<button class="cbtn ${b.c}${sel||ac?" sel":""}" ${ST.submitted?"disabled":""} onclick="pickBat('${s.id}','${b.v}')">
       <span class="cl">${b.l}</span><span class="cs">${b.s}</span></button>`;
   }).join("");
 
   let pitRes="";
-  if(ST.submitted&&myP!=null){
-    const era=parseFloat(Math.abs(act.pct-myP).toFixed(3));
-    const g=era<=1?"great":era<=3?"good":"miss";
-    const gc=g==="great"?"#40C880":g==="good"?"#FFD030":"#E83030";
-    const gl=g==="great"?"◎ 매우 근접":g==="good"?"○ 근접":"△ 빗나감";
+  if(g&&myP!=null){
+    const era=g.era_value;
+    const grade=era<=1?"great":era<=3?"good":"miss";
+    const gc=grade==="great"?"#40C880":grade==="good"?"#FFD030":"#E83030";
+    const gl=grade==="great"?"◎ 매우 근접":grade==="good"?"○ 근접":"△ 빗나감";
     pitRes=`<div class="pit-result">
       <span style="color:${gc};font-weight:700">${gl}</span>
-      <span style="color:#7A90B0;margin-left:6px">실제 ${act.pct>=0?"+":""}${act.pct}% · 예측 ${myP>=0?"+":""}${myP}%</span><br>
+      <span style="color:#7A90B0;margin-left:6px">실제 ${actualPct>=0?"+":""}${actualPct}% · 예측 ${myP>=0?"+":""}${myP}%</span><br>
       <span style="color:#7A90B0">오차 ${era}%p · ERA ${era}</span>
     </div>`;
   }
 
-  const resTag=ST.submitted?`<span class="res-tag" style="color:${rpc(act.pct)}">${act.pct>=0?"+":""}${act.pct}% ${batOk?"✓":batNg?"✗":""}</span>`:"";
+  let resTag="";
+  if(g){
+    resTag=`<span class="res-tag" style="color:${rpc(actualPct)}">${actualPct>=0?"+":""}${actualPct}% ${g.is_hit?"✓":"✗"}</span>`;
+  }else if(ST.submitted){
+    resTag=`<span class="res-tag" style="color:#7A90B0">⏳ 채점 대기</span>`;
+  }
 
   return`<div class="scard${cls}">
     <div class="scard-head">
@@ -505,8 +505,13 @@ function updateSubBtn(){
 }
 function updateHdr(){
   if(ST.submitted){
-    const h=STOCKS.filter(s=>ST.batPred[s.id]===TODAY.find(r=>r.id===s.id).result).length;
-    document.getElementById("hdr-score").textContent=`타 ${h}/10 적중`;
+    const gradedCount=STOCKS.filter(s=>ST.graded[s.id]).length;
+    if(gradedCount===0){
+      document.getElementById("hdr-score").textContent="채점 대기 중";
+    }else{
+      const hits=STOCKS.filter(s=>ST.graded[s.id]&&ST.graded[s.id].is_hit).length;
+      document.getElementById("hdr-score").textContent=`타 ${hits}/${gradedCount} 적중`;
+    }
   }else{
     const {b,p}=doneCount();
     document.getElementById("hdr-score").textContent=`${Math.min(b,p)}/10 입력`;
@@ -516,48 +521,19 @@ function updateHdr(){
 async function doSubmit(){
   if(!allDone())return;
   ST.submitted=true;
-  ST.myPlays++;
+  ST.graded={}; // 방금 제출한 예측은 아직 채점되지 않음
   markSubmittedPhase();
+  renderPredict();
   savePredictions().then(()=>{
     if(!currentNickname) showNicknameModal();
   });
-  let hits=0;const eras=[];
-  STOCKS.forEach(s=>{
-    const act=TODAY.find(r=>r.id===s.id);
-    const hit=ST.batPred[s.id]===act.result;
-    if(hit)hits++;
-    const pb=ST.myBat.bySt[s.id]||{plays:0,hits:0};
-    ST.myBat.bySt[s.id]={plays:pb.plays+1,hits:pb.hits+(hit?1:0)};
-    const era=parseFloat(Math.abs(act.pct-ST.pitPred[s.id]).toFixed(3));
-    eras.push(era);
-    const pp=ST.myPit.bySt[s.id]||{plays:0,totalEra:0};
-    ST.myPit.bySt[s.id]={plays:pp.plays+1,totalEra:parseFloat((pp.totalEra+era).toFixed(3))};
-  });
-  ST.myBat.total+=hits;
-  const avgEra=parseFloat((eras.reduce((a,b)=>a+b,0)/eras.length).toFixed(3));
-  ST.myPit.totalEra=parseFloat((ST.myPit.totalEra+avgEra).toFixed(3));
-  ST.myPit.pitCount++;
-  renderPredict();updateHdr();
-  const tp=Object.values(ST.myBat.bySt).reduce((a,b)=>a+b.plays,0);
-  const th=ST.myBat.total;
-  const oe=ST.myPit.pitCount?parseFloat((ST.myPit.totalEra/ST.myPit.pitCount).toFixed(3)):0;
   const ar=document.getElementById("res-area");
   ar.style.display="block";
-  ar.innerHTML=`<div class="res-box">
-    <div class="res-row">
-      <div class="res-half"><div class="res-label bat">⚾ BATTER</div>
-        <div><span class="res-big-num" style="color:#E83030">${hits}</span><span class="res-of">/10</span></div>
-        <div class="res-sub">오늘 적중</div></div>
-      <div class="res-half"><div class="res-label pit">🎯 PITCHER</div>
-        <div><span class="res-big-num" style="color:${eraColor(avgEra)}">${avgEra}</span></div>
-        <div class="res-sub">오늘 ERA</div></div>
-    </div>
-    <div class="res-stats">
-      <div class="mini-s"><div class="mini-v">${ST.myPlays}회</div><div class="mini-l">누적 참여</div></div>
-      <div class="mini-s"><div class="mini-v" style="color:#FFD030">${batAvg(th,tp)}</div><div class="mini-l">통산 타율</div></div>
-      <div class="mini-s"><div class="mini-v" style="color:#90C8FF">${oe}</div><div class="mini-l">통산 ERA</div></div>
-    </div>
-    <button class="goto-btn" onclick="showTab(1)">종목 라인업 보기 →</button>
+  ar.innerHTML=`<div class="res-box" style="text-align:center;padding:22px 16px">
+    <div style="font-size:32px;margin-bottom:10px">✅</div>
+    <div style="font-size:15px;font-weight:700;margin-bottom:6px">예측 완료</div>
+    <div style="font-size:12px;color:#7A90B0;line-height:1.7">결과는 다음 거래일 장 마감 후<br>자동으로 채점되어 반영됩니다.</div>
+    <button class="goto-btn" style="margin-top:14px" onclick="showTab(1)">종목 라인업 보기 →</button>
   </div>`;
 }
 
