@@ -241,6 +241,43 @@ const STOCKS=[
 // 투수 모드: -30% ~ +30%, 1% 단위 콤보박스 옵션
 const PCT_OPTIONS = Array.from({length:61}, (_,i)=>i-30);
 
+/* ── 시장 캘린더 (KRX 휴장일/특수 개장일) ──
+   type: "closed" 하루 종일 휴장 (주말과 동일하게 처리)
+         "delayed_open" 그날만 개장 시각이 다름, open 필드로 지정. 마감은 항상 15:30로 동일.
+   실제 공휴일이 토·일요일과 겹치는 경우 대체공휴일만 등록하고(원래 날짜는 주말이라 이미 휴장),
+   대체공휴일이 없는 항목(예: 현충일 2026-06-06 토요일)은 주말 규칙으로 이미 커버되어 별도 등록 불필요. */
+const MARKET_CALENDAR = {
+  '2026-01-01': {type:'closed'},                      // 신정
+  '2026-01-02': {type:'delayed_open', open:'10:00'},   // 연초 개장일 — 개장식으로 1시간 늦은 10시 개장, 마감 15:30 동일
+  '2026-02-16': {type:'closed'},                       // 설날 연휴
+  '2026-02-17': {type:'closed'},                       // 설날
+  '2026-02-18': {type:'closed'},                       // 설날 연휴
+  '2026-03-02': {type:'closed'},                       // 삼일절 대체공휴일 (3/1 삼일절은 일요일)
+  '2026-05-01': {type:'closed'},                       // 노동절(근로자의 날) — 2026년부터 전 국민 법정공휴일로 승격, 거래소 전 시장 휴장
+  '2026-05-05': {type:'closed'},                       // 어린이날
+  '2026-05-25': {type:'closed'},                       // 부처님오신날 대체공휴일 (5/24 부처님오신날은 일요일)
+  '2026-06-03': {type:'closed'},                       // 전국동시지방선거일 — 거래소 임시 휴장
+  '2026-07-17': {type:'closed'},                       // 제헌절 — 2026년부터 거래소 정기 휴장일에 포함
+  '2026-08-17': {type:'closed'},                       // 광복절 대체공휴일 (8/15 광복절은 토요일)
+  '2026-09-24': {type:'closed'},                       // 추석 연휴
+  '2026-09-25': {type:'closed'},                       // 추석
+  '2026-10-05': {type:'closed'},                       // 개천절 대체공휴일 (10/3 개천절은 토요일)
+  '2026-10-09': {type:'closed'},                       // 한글날
+  '2026-12-25': {type:'closed'},                       // 성탄절
+  '2026-12-31': {type:'closed'},                       // 연말 폐장일
+  // 대학수학능력시험일: 2026년 11월 셋째 주 목요일(11/19)로 예상되나 공식 확정 전.
+  // 날짜 확정되면 '2026-11-19': {type:'closed'} 형태로 추가할 것 (실제 시장 조치가 개장 지연일지 휴장일지도 그때 확인 필요).
+};
+
+function dateKey(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function isMarketClosed(d){
+  if(d.getDay()===0 || d.getDay()===6) return true;
+  const cal=MARKET_CALENDAR[dateKey(d)];
+  return !!(cal && cal.type==="closed");
+}
+
 /* ── Supabase 연동 ── */
 const SUPABASE_URL = 'https://cdlplhomkrwnybedesgz.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_K5M6b3yeKhgWxX86tOQYdQ_qWaxtbjE';
@@ -252,15 +289,12 @@ let currentNickname = null;
 // trade_date는 "제출 시각"이 아니라 "이 예측이 맞히려는 실제 거래일(다음 종가)"을 의미해야
 // /api/settle-results의 "trade_date = 오늘" 조회와 맞아떨어진다.
 // 장마감후(after) 제출은 다음 거래일 종가를 맞히는 것이고, 익일장전(before) 제출은
-// 이미 그날이 대상 거래일이므로 보정이 필요 없다. 주말로 넘어가면 다음 월요일로 민다.
+// 이미 그날이 대상 거래일이므로 보정이 필요 없다. 주말·공휴일로 넘어가면 다음 거래일로 민다.
 function getTargetTradeDate(){
   const kst = new Date(new Date().toLocaleString("en-US", {timeZone:"Asia/Seoul"}));
   if (getMarketPhase() === "after") kst.setDate(kst.getDate()+1);
-  while (kst.getDay()===0 || kst.getDay()===6) kst.setDate(kst.getDate()+1);
-  const y = kst.getFullYear();
-  const m = String(kst.getMonth()+1).padStart(2,"0");
-  const d = String(kst.getDate()).padStart(2,"0");
-  return `${y}-${m}-${d}`;
+  while (isMarketClosed(kst)) kst.setDate(kst.getDate()+1);
+  return dateKey(kst);
 }
 
 async function initAuth(){
@@ -363,21 +397,28 @@ async function submitNickname(){
 }
 
 /* ── 장 시간 판별 ──
-   한국 주식 시장: 평일 09:00 ~ 15:30 (KST = UTC+9)
-   - 장 중(09:00~15:30): 예측 비활성
-   - 장 마감 후(15:30~익일 09:00): 예측 활성, 당일 종가 표시
-   - 주말/공휴일: 예측 비활성 (다음 거래일 종가 기준으로 변경 필요)
+   한국 주식 시장: 평일 09:00 ~ 15:30 (KST = UTC+9), MARKET_CALENDAR의 휴장/지연개장일 반영
+   - 장 중: 예측 비활성
+   - 장 마감 후(당일): 예측 활성, 당일 종가 표시
+   - 주말/공휴일: 예측 비활성 (다음 거래일 종가 기준)
 */
 function getMarketPhase() {
   const now = new Date();
   const kst = new Date(now.toLocaleString("en-US", {timeZone:"Asia/Seoul"}));
   const day = kst.getDay(); // 0=일, 6=토
+  const cal = MARKET_CALENDAR[dateKey(kst)];
+  if (cal && cal.type === "closed") return "weekend"; // 공휴일은 주말과 동일하게 처리
+  if (day === 0 || day === 6) return "weekend";        // 주말
+
   const h = kst.getHours();
   const m = kst.getMinutes();
   const minNow = h * 60 + m;
-  const open  = 9 * 60;       // 09:00
+  let open = 9 * 60;          // 09:00 기본 개장 시각
   const close = 15 * 60 + 30; // 15:30
-  if (day === 0 || day === 6) return "weekend";   // 주말
+  if (cal && cal.type === "delayed_open") {
+    const [oh, om] = cal.open.split(":").map(Number);
+    open = oh * 60 + om;
+  }
   if (minNow >= open && minNow < close) return "open";    // 장 중
   if (minNow >= close) return "after";  // 장 마감 후 (당일)
   return "before"; // 익일 장 전 (전날 종가 기준)
