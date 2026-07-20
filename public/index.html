@@ -566,7 +566,9 @@ async function submitMagicLink(){
     options:{ emailRedirectTo: window.location.origin, shouldCreateUser:false, captchaToken }
   });
   if(error){
-    errBox.textContent=error.message;
+    errBox.textContent = error.message.includes('Signups not allowed')
+      ? "아직 등록되지 않은 이메일이에요. 먼저 예측을 제출한 뒤 '이메일로 기록 저장하기'로 계정을 만들어주세요."
+      : error.message;
     errBox.style.display='block';
     input.classList.add('err');
     return;
