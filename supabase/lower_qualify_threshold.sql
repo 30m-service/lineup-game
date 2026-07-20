@@ -1,7 +1,5 @@
--- 종목 라인업 / 올스타 탭을 실제 lineup_predictions 데이터로 집계하기 위한 함수.
--- RLS는 "본인 row만" 허용하므로, 랭킹처럼 전체 유저를 집계해야 하는 조회는
--- SECURITY DEFINER 함수로 RLS를 우회하되, 원본 row가 아닌 "집계 결과"만 반환한다
--- (개별 예측 선택 내역은 여전히 비공개로 유지됨).
+-- 라인업/올스타 자격 기준을 10회 -> 3회로 완화.
+-- create or replace이므로 기존 함수를 덮어쓰며, 부여된 grant는 유지된다.
 -- Supabase SQL Editor에서 실행하세요.
 
 create or replace function lineup_stock_batters(p_stock_code text)
@@ -59,8 +57,3 @@ language sql security definer set search_path = public as $$
   order by avg(p.era_value) asc
   limit 5;
 $$;
-
-grant execute on function lineup_stock_batters(text) to anon, authenticated;
-grant execute on function lineup_stock_pitchers(text) to anon, authenticated;
-grant execute on function lineup_allstar_batters() to anon, authenticated;
-grant execute on function lineup_allstar_pitchers() to anon, authenticated;
