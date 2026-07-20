@@ -213,6 +213,7 @@ body{background:#070B16;color:#E8ECF8;font-family:'Paperlogy',-apple-system,sans
     <button class="tab" id="t2" onclick="showTab(2)">올스타 라인업</button>
   </div>
   <div class="acct-bar" id="acct-bar"></div>
+  <div id="turnstile-widget" style="display:flex;justify-content:center;padding:4px 0"></div>
 </div>
 
 <div class="content show" id="tab0">
@@ -340,6 +341,7 @@ body{background:#070B16;color:#E8ECF8;font-family:'Paperlogy',-apple-system,sans
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <script>
 const STOCKS=[
   {id:"005930",name:"삼성전자",  sector:"반도체", price:null},
@@ -402,6 +404,33 @@ const SUPABASE_URL = 'https://cdlplhomkrwnybedesgz.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_K5M6b3yeKhgWxX86tOQYdQ_qWaxtbjE';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Cloudflare Turnstile — Site Key는 공개돼도 안전(비밀키는 Supabase 대시보드에만 존재).
+// 봇 남용 방지를 위해 익명 로그인 · 매직링크 발송 직전에 매번 새 토큰을 발급받아 사용한다.
+const TURNSTILE_SITE_KEY = '0x4AAAAAAD5hm52s8nOGTGGO';
+let turnstileWidgetId = null;
+
+function waitForTurnstile(){
+  return new Promise(resolve=>{
+    if(window.turnstile){ resolve(); return; }
+    const iv=setInterval(()=>{ if(window.turnstile){ clearInterval(iv); resolve(); } }, 50);
+  });
+}
+async function getTurnstileToken(){
+  await waitForTurnstile();
+  if(turnstileWidgetId!=null){
+    try{ turnstile.remove(turnstileWidgetId); }catch(e){}
+  }
+  return new Promise((resolve,reject)=>{
+    turnstileWidgetId = turnstile.render('#turnstile-widget', {
+      sitekey: TURNSTILE_SITE_KEY,
+      appearance: 'interaction-only',
+      callback: token => resolve(token),
+      'error-callback': () => reject(new Error('캡차 검증에 실패했습니다. 새로고침 후 다시 시도해주세요.')),
+      'expired-callback': () => reject(new Error('캡차가 만료됐습니다. 다시 시도해주세요.')),
+    });
+  });
+}
+
 let currentUserId = null;
 let currentNickname = null;
 let userEmail = null;
@@ -440,7 +469,8 @@ async function initAuth(){
   try{
     let { data:{ session } } = await sb.auth.getSession();
     if(!session){
-      const { data, error } = await sb.auth.signInAnonymously();
+      const captchaToken = await getTurnstileToken();
+      const { data, error } = await sb.auth.signInAnonymously({ options: { captchaToken } });
       if(error) throw error;
       session = data.session;
     }
@@ -523,9 +553,17 @@ async function submitMagicLink(){
   const errBox=document.getElementById('magic-link-error');
   const email=input.value.trim();
   if(!email) return;
+  let captchaToken;
+  try{
+    captchaToken = await getTurnstileToken();
+  }catch(e){
+    errBox.textContent=e.message;
+    errBox.style.display='block';
+    return;
+  }
   const { error } = await sb.auth.signInWithOtp({
     email,
-    options:{ emailRedirectTo: window.location.origin, shouldCreateUser:false }
+    options:{ emailRedirectTo: window.location.origin, shouldCreateUser:false, captchaToken }
   });
   if(error){
     errBox.textContent=error.message;
