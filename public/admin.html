@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LINE UP 관리자</title>
+<style>
+  :root {
+    --bg: #0a0e17;
+    --panel: #131826;
+    --border: #232a3b;
+    --text: #e5e9f0;
+    --dim: #7c8494;
+    --accent: #ef4444;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 20px; }
+  .hidden { display: none !important; }
+
+  /* 로그인 게이트 */
+  #login-view {
+    max-width: 320px;
+    margin: 80px auto;
+    text-align: center;
+  }
+  #login-view input {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 15px;
+    margin-bottom: 10px;
+  }
+  #login-view button, .action-btn {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #login-error { color: var(--accent); font-size: 13px; margin-top: 8px; min-height: 18px; }
+
+  /* 탭 */
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    background: none; border: none; color: var(--dim); padding: 10px 16px;
+    cursor: pointer; font-size: 14px; border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .filters { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .filters input {
+    padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: 13px;
+  }
+  .filters button {
+    padding: 8px 14px; border-radius: 6px; border: none; background: #2a3145;
+    color: var(--text); cursor: pointer; font-size: 13px;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--dim); font-weight: 500; }
+  tr:hover td { background: #171d2c; }
+
+  .badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+  .badge.ok { background: rgba(34,197,94,0.15); color: var(--ok); }
+  .badge.warn { background: rgba(245,158,11,0.15); color: var(--warn); }
+
+  .inline-edit { display: flex; gap: 6px; align-items: center; }
+  .inline-edit input {
+    width: 110px; padding: 4px 6px; font-size: 12px; border-radius: 4px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  }
+  .inline-edit button, .danger-btn {
+    padding: 4px 8px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer;
+  }
+  .inline-edit button { background: #2a3145; color: var(--text); }
+  .danger-btn { background: rgba(239,68,68,0.15); color: var(--accent); }
+
+  #toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--border); padding: 10px 18px;
+    border-radius: 8px; font-size: 13px; display: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="login-view">
+  <h1>LINE UP 관리자</h1>
+  <input type="password" id="pw-input" placeholder="관리자 비밀번호" onkeydown="if(event.key==='Enter') login()">
+  <button onclick="login()">로그인</button>
+  <div id="login-error"></div>
+</div>
+
+<div id="admin-view" class="hidden">
+  <h1>LINE UP 관리자</h1>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="users" onclick="switchTab('users')">유저 관리</button>
+    <button class="tab-btn" data-tab="predictions" onclick="switchTab('predictions')">예측 조회</button>
+    <button class="tab-btn" data-tab="settlement" onclick="switchTab('settlement')">채점 상태</button>
+  </div>
+
+  <div id="tab-users" class="panel">
+    <div class="filters">
+      <input id="user-search" placeholder="이메일 또는 닉네임 검색" oninput="renderUsers()">
+      <button onclick="loadUsers()">새로고침</button>
+    </div>
+    <table>
+      <thead><tr><th>이메일</th><th>닉네임</th><th>가입일</th><th>동작</th></tr></thead>
+      <tbody id="users-body"></tbody>
+    </table>
+  </div>
+
+  <div id="tab-predictions" class="panel hidden">
+    <div class="filters">
+      <input id="pred-stock" placeholder="종목코드 (예: 005930)">
+      <input id="pred-date" type="date">
+      <button onclick="loadPredictions()">조회</button>
+    </div>
+    <table>
+      <thead><tr><th>날짜</th><th>종목</th><th>기준종가</th><th>실제종가</th><th>예측</th><th>적중</th><th>ERA</th></tr></thead>
+      <tbody id="predictions-body"></tbody>
+    </table>
+  </div>
+
+  <div id="tab-settlement" class="panel hidden">
+    <div class="filters">
+      <button onclick="loadSettlement()">새로고침</button>
+    </div>
+    <table>
+      <thead><tr><th>날짜</th><th>전체</th><th>채점완료</th><th>미채점</th><th>상태</th></tr></thead>
+      <tbody id="settlement-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = '/api/admin';
+let token = sessionStorage.getItem('lineup_admin_token') || null;
+let usersCache = [];
+
+// 닉네임/이메일은 사용자가 자유 입력한 값이라, innerHTML에 그대로 넣으면 저장형 XSS로
+// 이어질 수 있다. 텍스트/속성 컨텍스트 둘 다에서 안전하도록 이스케이프한다.
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 2500);
+}
+
+async function callApi(action, body = {}) {
+  const res = await fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, token, ...body })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '요청 실패');
+  return data;
+}
+
+async function login() {
+  const pw = document.getElementById('pw-input').value;
+  const errBox = document.getElementById('login-error');
+  errBox.textContent = '';
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'login', password: pw })
+    });
+    const data = await res.json();
+    if (!res.ok) { errBox.textContent = data.error; return; }
+    token = data.token;
+    sessionStorage.setItem('lineup_admin_token', token);
+    showAdmin();
+  } catch (e) {
+    errBox.textContent = '로그인 중 오류가 발생했습니다';
+  }
+}
+
+function showAdmin() {
+  document.getElementById('login-view').classList.add('hidden');
+  document.getElementById('admin-view').classList.remove('hidden');
+  loadUsers();
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+  document.getElementById('tab-' + name).classList.remove('hidden');
+  if (name === 'predictions' && !document.getElementById('predictions-body').children.length) loadPredictions();
+  if (name === 'settlement') loadSettlement();
+}
+
+// ---- 유저 관리 ----
+async function loadUsers() {
+  try {
+    const data = await callApi('users');
+    usersCache = data.users;
+    renderUsers();
+  } catch (e) {
+    if (e.message.includes('만료')) { logout(); return; }
+    toast('불러오기 실패: ' + e.message);
+  }
+}
+
+function renderUsers() {
+  const q = document.getElementById('user-search').value.trim().toLowerCase();
+  const filtered = usersCache.filter(u =>
+    (u.email || '').toLowerCase().includes(q) || (u.nickname || '').toLowerCase().includes(q)
+  );
+  const body = document.getElementById('users-body');
+  body.innerHTML = filtered.map(u => `
+    <tr>
+      <td>${u.email ? escapeHtml(u.email) : '<span style="color:var(--dim)">-</span>'}</td>
+      <td>
+        <div class="inline-edit">
+          <input value="${escapeHtml(u.nickname || '')}" id="nick-${u.id}" placeholder="없음">
+          <button onclick="updateNickname('${u.id}')">저장</button>
+        </div>
+      </td>
+      <td>${new Date(u.created_at).toLocaleDateString('ko-KR')}</td>
+      <td><button class="danger-btn" onclick="deleteUser('${u.id}')">삭제</button></td>
+    </tr>
+  `).join('');
+}
+
+async function updateNickname(userId) {
+  const val = document.getElementById('nick-' + userId).value.trim();
+  try {
+    await callApi('update_nickname', { userId, nickname: val || null });
+    toast('닉네임이 저장되었습니다');
+    loadUsers();
+  } catch (e) {
+    toast('저장 실패: ' + e.message);
+  }
+}
+
+async function deleteUser(userId) {
+  if (!confirm('이 유저의 예측 데이터와 계정 정보를 완전히 삭제합니다. 계속하시겠습니까?')) return;
+  try {
+    await callApi('delete_user', { userId });
+    toast('삭제되었습니다');
+    loadUsers();
+  } catch (e) {
+    toast('삭제 실패: ' + e.message);
+  }
+}
+
+// ---- 예측 조회 ----
+async function loadPredictions() {
+  const stock_code = document.getElementById('pred-stock').value.trim();
+  const trade_date = document.getElementById('pred-date').value;
+  try {
+    const data = await callApi('predictions', { stock_code, trade_date });
+    document.getElementById('predictions-body').innerHTML = data.predictions.map(p => `
+      <tr>
+        <td>${escapeHtml(p.trade_date)}</td>
+        <td>${escapeHtml(p.stock_code)}</td>
+        <td>${Number(p.base_close_price).toLocaleString()}</td>
+        <td>${p.actual_close_price ? Number(p.actual_close_price).toLocaleString() : '-'}</td>
+        <td>${escapeHtml(p.bat_choice)}</td>
+        <td>${p.is_hit === null ? '-' : (p.is_hit ? '<span class="badge ok">적중</span>' : '<span class="badge warn">실패</span>')}</td>
+        <td>${p.era_value ?? '-'}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    toast('조회 실패: ' + e.message);
+  }
+}
+
+// ---- 채점 상태 ----
+async function loadSettlement() {
+  try {
+    const data = await callApi('settlement');
+    document.getElementById('settlement-body').innerHTML = data.settlement.map(s => `
+      <tr>
+        <td>${escapeHtml(s.trade_date)}</td>
+        <td>${s.total}</td>
+        <td>${s.settled}</td>
+        <td>${s.unsettled}</td>
+        <td>${s.unsettled === 0
+          ? '<span class="badge ok">완료</span>'
+          : '<span class="badge warn">대기/누락</span>'}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    toast('조회 실패: ' + e.message);
+  }
+}
+
+function logout() {
+  sessionStorage.removeItem('lineup_admin_token');
+  token = null;
+  location.reload();
+}
+
+if (token) showAdmin();
+</script>
+</body>
+</html>
