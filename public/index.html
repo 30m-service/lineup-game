@@ -535,7 +535,9 @@ async function submitEmailLink(){
   if(!email) return;
   const { error } = await sb.auth.updateUser({ email }, { emailRedirectTo: window.location.origin });
   if(error){
-    errBox.textContent=error.message;
+    errBox.textContent = error.message.includes('already been registered')
+      ? "이미 사용 중인 이메일이에요. 이 이메일로 이미 계정이 있다면, '다른 기기에서 로그인'을 이용해주세요."
+      : error.message;
     errBox.style.display='block';
     input.classList.add('err');
     return;
