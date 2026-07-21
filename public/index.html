@@ -306,6 +306,17 @@ body{background:#070B16;color:#E8ECF8;font-family:'Paperlogy',-apple-system,sans
   </div>
 </div>
 
+<div class="modal-overlay" id="email-prompt-modal">
+  <div class="modal-box">
+    <div class="modal-title">지금까지 5번의 예측을 쌓아오셨어요</div>
+    <div style="font-size:13px;color:#C0CAD8;line-height:1.6;margin-bottom:16px">
+      이 기록이 사라지지 않도록 이메일을 등록해두시겠어요? 다른 기기에서도 이어서 확인할 수 있어요.
+    </div>
+    <button class="modal-btn" onclick="acceptEmailPrompt()">이메일 등록하기</button>
+    <button class="modal-btn" style="background:#131828;color:#7A90B0;margin-top:8px" onclick="dismissEmailPrompt()">나중에 하기</button>
+  </div>
+</div>
+
 <div class="modal-overlay" id="onboard-modal">
   <div class="modal-box" style="max-width:360px;text-align:left;position:relative">
     <button class="ob-close" onclick="hideOnboardModal()">✕</button>
@@ -872,7 +883,8 @@ async function doSubmit(){
   renderPredict();
   await savePredictions();
   if(!currentNickname) showNicknameModal();
-  await renderSubmittedSummary();
+  const stats = await renderSubmittedSummary();
+  maybeShowEmailPrompt(stats);
 }
 
 // lineup_predictions에 실제로 쌓인 기록 기준 — 세션 로컬 카운터 아님.
@@ -921,6 +933,27 @@ async function renderSubmittedSummary(){
     ${progressHtml}
     <button class="goto-btn" style="margin-top:10px" onclick="showTab(1)">종목 라인업 보기 →</button>
   </div>`;
+  return stats;
+}
+
+// 이메일 미연결 계정이 정확히 5번째 제출을 마친 시점에 1회만 등록을 유도.
+// localStorage 플래그(유저별)로 한 번 닫으면 다시는 안 뜨게 한다.
+function maybeShowEmailPrompt(stats){
+  if(userEmail) return; // 이미 이메일 연결된 계정이면 절대 안 띄움
+  if(!stats || stats.participation !== 5) return;
+  if(localStorage.getItem(`email_prompt_shown_${currentUserId}`)) return;
+  document.getElementById('email-prompt-modal').style.display='flex';
+}
+function hideEmailPromptModal(){
+  document.getElementById('email-prompt-modal').style.display='none';
+  localStorage.setItem(`email_prompt_shown_${currentUserId}`, '1');
+}
+function acceptEmailPrompt(){
+  hideEmailPromptModal();
+  showEmailLinkModal(); // 기존 이메일 연결 모달/submitEmailLink() 흐름을 그대로 재사용
+}
+function dismissEmailPrompt(){
+  hideEmailPromptModal();
 }
 
 function renderScroll(){
