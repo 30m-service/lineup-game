@@ -741,7 +741,7 @@ const ST={tab:0,batPred:{},pitPred:{},submitted:false,graded:{},
   activeStock:STOCKS[0].id};
 
 function fa(h,p){return p?h/p:0}
-function batAvg(h,p){if(!p)return".000";return"."+Math.floor(fa(h,p)*1000).toString().padStart(3,"0")}
+function batAvg(h,p){if(!p)return".000";const v=Math.floor(fa(h,p)*1000);return v>=1000?"1.000":"."+v.toString().padStart(3,"0")}
 function pctStr(h,p){return p?Math.round(fa(h,p)*100)+"%":"0%"}
 function avgColor(a){return a>=0.4?"#FFD030":a>=0.33?"#90C8FF":"#E8ECF8"}
 function eraColor(e){return e<=1.5?"#40C880":e<=3?"#FFD030":"#E83030"}
