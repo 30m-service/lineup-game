@@ -211,6 +211,7 @@ body{background:#070B16;color:#E8ECF8;font-family:'Paperlogy',-apple-system,sans
     <button class="tab on" id="t0" onclick="showTab(0)">오늘 예측</button>
     <button class="tab" id="t1" onclick="showTab(1)">종목 라인업</button>
     <button class="tab" id="t2" onclick="showTab(2)">올스타 라인업</button>
+    <button class="tab" id="t3" onclick="showTab(3)">내 성적</button>
   </div>
   <div class="acct-bar" id="acct-bar"></div>
   <div id="turnstile-widget" style="display:flex;justify-content:center;padding:4px 0"></div>
@@ -239,6 +240,15 @@ body{background:#070B16;color:#E8ECF8;font-family:'Paperlogy',-apple-system,sans
   </div>
   <div id="as-list"></div>
   <div class="leg" id="leg-box"></div>
+</div>
+
+<div class="content" id="tab3">
+  <div id="mystats-summary"></div>
+  <div class="sec-divider"></div>
+  <div class="lu-section-hdr" style="margin-bottom:8px">
+    <span class="lu-title">종목별 성적</span>
+  </div>
+  <div id="mystats-bystock"></div>
 </div>
 
 <div class="footer-note">
@@ -740,12 +750,13 @@ function fmt(n){return Number(n).toLocaleString("ko-KR")}
 
 function showTab(n){
   ST.tab=n;
-  for(let i=0;i<3;i++){
+  for(let i=0;i<4;i++){
     document.getElementById("tab"+i).className="content"+(i===n?" show":"");
     document.getElementById("t"+i).className="tab"+(i===n?" on":"");
   }
   if(n===1){renderScroll();renderLineup(ST.activeStock);}
   if(n===2) renderAllstar();
+  if(n===3) renderMyStats();
 }
 
 function renderPredict(){
@@ -1038,6 +1049,80 @@ async function renderAllstar(){
     <span style="color:#E83030;font-weight:700">타율:</span> .400↑ 엘리트 · .330↑ 우수 · 미만 일반<br>
     <span style="color:#5090F8;font-weight:700">ERA:</span> 1.50↓ 에이스 · 3.00↓ 우수 · 초과 일반 · 낮을수록 정확<br>
     <span style="color:#FFD030;font-weight:700">라인업 자격:</span> 3회 이상 참여 필요`;
+}
+
+// 라인업 자격(3회)과 무관하게, 채점된 예측이 있으면 언제든 본인 성적을 보여준다.
+// 로그인 여부와도 무관 — currentUserId만 있으면(익명이어도) 동작.
+async function renderMyStats(){
+  const summaryBox=document.getElementById('mystats-summary');
+  const stockBox=document.getElementById('mystats-bystock');
+  summaryBox.innerHTML=`<div class="empty">불러오는 중...</div>`;
+  stockBox.innerHTML='';
+
+  if(!currentUserId){
+    summaryBox.innerHTML=`<div class="empty">불러오는 중...</div>`;
+    return;
+  }
+
+  const { data, error } = await sb.from('lineup_predictions')
+    .select('stock_code,is_hit,era_value').eq('user_id', currentUserId);
+  if(error){
+    console.error('내 성적 조회 실패:', error.message);
+    summaryBox.innerHTML=`<div class="empty">불러오지 못했습니다</div>`;
+    return;
+  }
+
+  const rows=data||[];
+  const gradedBat=rows.filter(r=>r.is_hit!=null);
+  const gradedPit=rows.filter(r=>r.era_value!=null);
+
+  if(gradedBat.length===0 && gradedPit.length===0){
+    summaryBox.innerHTML=`<div class="empty">아직 채점된 예측이 없어요</div>`;
+    stockBox.innerHTML='';
+    return;
+  }
+
+  const hits=gradedBat.filter(r=>r.is_hit).length;
+  const plays=gradedBat.length;
+  const avgEra=gradedPit.length
+    ? parseFloat((gradedPit.reduce((a,r)=>a+r.era_value,0)/gradedPit.length).toFixed(3))
+    : null;
+
+  summaryBox.innerHTML=`
+    <div class="res-stats">
+      <div class="mini-s"><div class="mini-v">${plays}전</div><div class="mini-l">타자 참여</div></div>
+      <div class="mini-s"><div class="mini-v" style="color:#FFD030">${batAvg(hits,plays)}</div><div class="mini-l">통산 타율</div></div>
+      <div class="mini-s"><div class="mini-v" style="color:#90C8FF">${avgEra!=null?avgEra:"-"}</div><div class="mini-l">통산 ERA</div></div>
+    </div>`;
+
+  const byStock={};
+  STOCKS.forEach(s=>{ byStock[s.id]={hits:0,plays:0,eraSum:0,eraCount:0}; });
+  gradedBat.forEach(r=>{
+    if(!byStock[r.stock_code]) return;
+    byStock[r.stock_code].plays++;
+    if(r.is_hit) byStock[r.stock_code].hits++;
+  });
+  gradedPit.forEach(r=>{
+    if(!byStock[r.stock_code]) return;
+    byStock[r.stock_code].eraSum+=r.era_value;
+    byStock[r.stock_code].eraCount++;
+  });
+
+  const stockRows=STOCKS.map(s=>{
+    const st=byStock[s.id];
+    if(st.plays===0 && st.eraCount===0) return '';
+    const bits=[];
+    if(st.plays>0) bits.push(`${st.plays}전 ${st.hits}승 (타율 ${batAvg(st.hits,st.plays)})`);
+    if(st.eraCount>0) bits.push(`ERA ${(st.eraSum/st.eraCount).toFixed(2)} (${st.eraCount}회)`);
+    return`<div class="lcard">
+      <div class="pinfo">
+        <div class="pname">${s.name}</div>
+        <div class="pstat">${bits.join(' · ')}</div>
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  stockBox.innerHTML = stockRows || `<div class="empty">종목별 기록이 없습니다</div>`;
 }
 
 /* ── 초기화 ── */
