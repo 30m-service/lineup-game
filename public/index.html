@@ -177,7 +177,7 @@ body{background:#070B16;color:#E8ECF8;font-family:'Paperlogy',-apple-system,sans
 
 /* 닉네임 모달 */
 .modal-overlay{position:fixed;inset:0;background:#04060Bcc;display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
-.modal-box{background:#0C1120;border:1px solid #18203A;border-radius:14px;padding:22px 18px;width:100%;max-width:340px}
+.modal-box{background:#0C1120;border:1px solid #18203A;border-radius:14px;padding:22px 18px;width:100%;max-width:340px;position:relative}
 .modal-title{font-size:14px;font-weight:700;margin-bottom:12px;line-height:1.5}
 .modal-input{width:100%;background:#06090F;border:1px solid #18203A;border-radius:8px;padding:10px 12px;color:#E8ECF8;font-size:14px;outline:none;margin-bottom:12px}
 .modal-input:focus{border-color:#3070E8}
@@ -271,6 +271,7 @@ body{background:#070B16;color:#E8ECF8;font-family:'Paperlogy',-apple-system,sans
 
 <div class="modal-overlay" id="email-link-modal">
   <div class="modal-box">
+    <button class="ob-close" onclick="hideEmailLinkModal()" aria-label="닫기">✕</button>
     <div id="email-link-form">
       <div class="modal-title">이메일로 예측 기록을 저장하세요</div>
       <input class="modal-input" id="email-link-input" type="email" placeholder="이메일 주소"
@@ -542,6 +543,10 @@ function showEmailLinkModal(){
 function hideEmailLinkModal(){
   document.getElementById('email-link-modal').style.display='none';
 }
+document.addEventListener('keydown', (e) => {
+  if(e.key !== 'Escape') return;
+  if(document.getElementById('email-link-modal').style.display === 'flex') hideEmailLinkModal();
+});
 async function submitEmailLink(){
   const input=document.getElementById('email-link-input');
   const errBox=document.getElementById('email-link-error');
